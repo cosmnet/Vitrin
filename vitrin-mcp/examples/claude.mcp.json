@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vitrin": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/vitrin-mcp/dist/index.js"],
+      "env": {
+        "VITRIN_DIR": "/absolute/path/to/vitrin-studio",
+        "VITRIN_PORT": "4780"
+      }
+    }
+  }
+}

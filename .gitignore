@@ -1,0 +1,51 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+
+# Yerel Claude ayarları
+.claude/settings.local.json
+
+# --- Vitrin Studio ---------------------------------------------------------
+# Derleme çıktıları (her distDir: .next, .next-production, .next-*-dev …)
+vitrin-studio/.next*/
+vitrin-studio/tsconfig.tsbuildinfo
+vitrin-studio/next-env.d.ts
+
+# Kullanıcı verisi: projeler, önbellek, çekimler
+vitrin-studio/data/
+
+# Görsel varlıklar (~1 GB) GitHub Releases'tan iner: scripts/package-assets.sh
+vitrin-studio/public/assets/
+
+# Yalnız geliştirme: ham 3D modeller, PSD ortamı, deneme klasörleri, iç notlar
+vitrin-studio/vendor/models-raw/
+vitrin-studio/.venv*/
+vitrin-studio/.scratch/
+vitrin-studio/docs/
+
+# Uygulamaya özel, yayımlanmayan içerik (private-stub/index.ts'e bakın)
+vitrin-studio/private/
+vitrin-studio/app/perfin-final/
+vitrin-studio/app/dive-theme/
+vitrin-studio/engine/perfin*.ts
+
+# Tek seferlik PSD çıkarma betikleri (yerel klasörlere bağlı)
+vitrin-studio/scripts/extract_psd*.py
+
+# Bakımcı çıktısı (Release arşivi)
+/dist/
+
+# Geliştirme QA sayfaları ve onları süren betikler
+vitrin-studio/app/test3d/
+vitrin-studio/scripts/*-qa.mjs
+
+# Kişisel uygulamalara ait içerik (DIVE, Mihrab, Vetrio…): yalnız bu makinede
+vitrin-studio/engine/diveStory.ts
+vitrin-studio/app/(marketing)/
+vitrin-studio/components/landing/
+vitrin-studio/public/landing/
+vitrin-studio/PLAN.md
+vitrin-studio/scripts/materialize-validation.mjs

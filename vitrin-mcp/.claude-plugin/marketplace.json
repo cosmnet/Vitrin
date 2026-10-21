@@ -1,0 +1,11 @@
+{
+  "name": "cosm-labs",
+  "owner": { "name": "Cosm Labs" },
+  "plugins": [
+    {
+      "name": "vitrin",
+      "source": "./",
+      "description": "Vitrin Studio MCP + Türkçe iş akışı becerisi — App Store ekran görüntüsü üretimi."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vitrin-studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "vitrin-studio", "run", "dev"],
+      "port": 4780
+    }
+  ]
+}

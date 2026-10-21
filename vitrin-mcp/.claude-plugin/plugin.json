@@ -1,0 +1,18 @@
+{
+  "name": "vitrin",
+  "version": "1.0.0",
+  "description": "Vitrin Studio'yu Claude'dan sür: ekran görüntülerini tara, App Store setini kurgula, önizle, 15 dile çevir ve export al.",
+  "author": { "name": "Cosm Labs" },
+  "keywords": ["app-store", "screenshots", "aso", "ios", "vitrin"],
+  "mcpServers": {
+    "vitrin": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
+      "env": {
+        "VITRIN_PORT": "4780"
+      },
+      "timeout": 600000
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "vitrin-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vitrin Studio'yu Claude'dan süren MCP sunucusu — tara, içe aktar, kurgula, önizle, export al.",
+  "bin": {
+    "vitrin-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "prepare": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "playwright-core": "^1.62.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,376 @@
+{
+  "files": {
+    "src/shaders/character-carousel/CharacterCarousel.tsx": {
+      "sha256": "3bc9c80e8201be3cde79697e8cddba6f4f8b1a3c4a5fb7ce7533dd6479409472",
+      "bundles": [
+        "character-filmstrip"
+      ]
+    },
+    "src/shaders/character-carousel/sources/character-filmstrip.html": {
+      "sha256": "4c98939e0e2b67efabcb8561c8b2e53b8c756e97bda44906b235ee7bc8f68b1c",
+      "bundles": [
+        "character-filmstrip"
+      ]
+    },
+    "src/shaders/crt/CrtBackground.tsx": {
+      "sha256": "20932f2655319c5fc6c6b3c29c890149beec7e4850edc414f909ab24a0c95031",
+      "bundles": [
+        "crt"
+      ]
+    },
+    "src/shaders/crt/crtRenderer.ts": {
+      "sha256": "a3eb536e9c50eeb31832e7d6d25021c1535137e8ead5eb1b864e5a27c340af03",
+      "bundles": [
+        "crt"
+      ]
+    },
+    "src/shaders/crt/crtScreens.ts": {
+      "sha256": "e545922e0d3afa19b9d01840d0ea684c56d0799714f9cf77a4712921bfec7adb",
+      "bundles": [
+        "crt"
+      ]
+    },
+    "src/shaders/crt/crtShaders.ts": {
+      "sha256": "cf3a7c747d1cac495c705529954e2491ad885489ddd5110724f8f4b3553f1592",
+      "bundles": [
+        "crt"
+      ]
+    },
+    "src/shaders/data-pixel-arc/DataPixelArcCanvas.tsx": {
+      "sha256": "2e25156d43dfd1bf0fb47384f75df240cd0c4038deae75a8dacae7c213269c5b",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/data-pixel-arc/dataPixelArcRenderer.ts": {
+      "sha256": "65bdfb98424996d935923f39f163e1667f0bc2b8faa458d900f4450beabba0eb",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/elements/ElementsBackground.tsx": {
+      "sha256": "04dfbb5d8e91e71772a34b4f963e2335458c4ffdace33071fa28b731a053ba95",
+      "bundles": [
+        "elemental-flame",
+        "elemental-water"
+      ]
+    },
+    "src/shaders/elements/sources/elemental-marks.html": {
+      "sha256": "7a6871fe99fa5e1551b27b2601f2a22dd23320ea2c90b5432c9c8e071f0b1d1d",
+      "bundles": [
+        "elemental-flame",
+        "elemental-water"
+      ]
+    },
+    "src/shaders/laser/LaserCollection.tsx": {
+      "sha256": "e81830f73d86cbaa71e4f32568ec596c461500370ef971315b1dff682c9d1639",
+      "bundles": [
+        "matrix-field"
+      ]
+    },
+    "src/shaders/laser/LaserVariants.tsx": {
+      "sha256": "4fdc907769b67369de011ee96594aed6dd0f54974c1db831ac9ac5c5f371ba4a",
+      "bundles": [
+        "matrix-field"
+      ]
+    },
+    "src/shaders/laser/laserShaders.ts": {
+      "sha256": "91248e937612f2d11b8dde4716d3546e47cd192ad36ebc76e1860f728285f967",
+      "bundles": [
+        "matrix-field"
+      ]
+    },
+    "src/shaders/liquid-metal-button/LiquidMetalButton.tsx": {
+      "sha256": "89b940bab445f17fafb444a7833b3c785d24c86a28156d8ad231e18de9503e11",
+      "bundles": [
+        "liquid-metal-button"
+      ]
+    },
+    "src/shaders/liquid-metal-button/liquid-metal-button.html": {
+      "sha256": "76624e881a3aecbd79b473d9c51f53c7157d47052abd0f9dc28fefd223b0a819",
+      "bundles": [
+        "liquid-metal-button"
+      ]
+    },
+    "src/shaders/lumen-cta/LumenCta.tsx": {
+      "sha256": "437b62c7b9b3009f1fc80fc24e81f2014c1bab9567ba1afcff314b72c6b0b519",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/lumen-cta/lumen-cta.css": {
+      "sha256": "a19f7e01d0a0580afaedfaccd7a1acb1a74a004ded3e5269d59da986e085c151",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/lumen-cta/sources/lumen.html": {
+      "sha256": "8992e7c0ceb4c306502f5c296f1fd3e8c8602372d1a217fa1f3b5e49445ec28d",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/NeuformBatchEffects.tsx": {
+      "sha256": "dc68c51bea26b922965de44b4fb8d6c432607508fb2b61e16ed60d245da1a69f",
+      "bundles": [
+        "matrix-field",
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/neuform-isolated/NeuformCraftEffects.tsx": {
+      "sha256": "0a1680c3c119dba8c61d946322afa0b64d36dfd80956fb5e7c3fd017d7bfa450",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/neuform-isolated/NeuformIsolatedEffects.tsx": {
+      "sha256": "fe9856234253bc3c1a13b3afb84f3d84644dfa6d578e7203bb3e1dd5eced1b75",
+      "bundles": [
+        "cloud-field",
+        "gallery-heading",
+        "predictive-arc",
+        "rectangle-buttons",
+        "threeui-intro"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/amber-halftone.html": {
+      "sha256": "3d9ebb64a15a1985c4cef1f01457281a49b2d9900405fd674e8748cac8af00a0",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/creator-studio-intro.html": {
+      "sha256": "e14795f24ea8aa9cb0005ea740923289869de3250ac4ea18f58527cd42e18cbe",
+      "bundles": [
+        "threeui-intro"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/dot-border-button.html": {
+      "sha256": "eb3ef1de8c8af80bf3f532630c60ed4ee90f10cd645d136f284417e75bda6584",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/floating-dots-cta.html": {
+      "sha256": "28f53a8d14920bbfede14b0cf096ebddef5dfbee87d46cfc70bdfb612c5796da",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/gallery-heading.html": {
+      "sha256": "8e42d2d5b4971bfc4d3c485112c3c51909e20a61b8842bc0dcd8db3ffe2d253a",
+      "bundles": [
+        "gallery-heading"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/generate-button.html": {
+      "sha256": "e99ab802a1e1f1a7b1444727e26197c43f8cfe328ca6e2cd45b6fbb3bce694c6",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/glassmorphism-cta.html": {
+      "sha256": "b535a5f6e778924906fa1625cf610841b847d52c17487dad83215dd5921a3863",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/gradient-beam-cta.html": {
+      "sha256": "90a5961c1e7374ecf1d4efa1e3ef051048a08567933491a91c67280d4eac9a42",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/gradient-cta.html": {
+      "sha256": "05e611c9ec16848e00ce81e4c8e186167da592c49755408cbc563c2ea611458d",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/gradient-pill-button.html": {
+      "sha256": "8fcb0596004786b6a72ca7bf1b2c379ef28ccf78f9de606a83d1572567a8986b",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/launch-button.html": {
+      "sha256": "db8303b70c0322d0c7877b32e8230ce906111ee746fa5460f8aeedf59915a900",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/matrix-field.html": {
+      "sha256": "7ee84b44ccad91f131563f34c633596a4c105512e8f0aa4303736f77681db835",
+      "bundles": [
+        "matrix-field"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/nexus-unified-flow.html": {
+      "sha256": "fa1a015ae407dc2091c3c96239d28107e973cbc03aa7abef37dd5da791d5428b",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/override-grid.html": {
+      "sha256": "dc7800f2b6b6329b8b71ea4a06b82af91cff8379701c6a7fa4c9a92d47f89d6c",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/signal-particles.html": {
+      "sha256": "613a2005d18795dbc25a5d0f93c3ae4dfecdfcb939ea6e2c5702b82eb1e4bfff",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/sliding-text-cta.html": {
+      "sha256": "e24ce6a519cfbafe082deb6eedb801b97b36ba6b8ccea9a81166c9b6edb6e770",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/spinning-border-button.html": {
+      "sha256": "d7150ca6ca4ad7975ba183c368b25a5de266e6a018c801b89720b8e8e3fab8a7",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/strata-cloud.html": {
+      "sha256": "c5a8085b413d310fe1c9a2deb39bcd5d8ecf0d545a4462f576a1c9b9c49f34fc",
+      "bundles": [
+        "cloud-field"
+      ]
+    },
+    "src/shaders/neuform-isolated/sources/void-protocol.html": {
+      "sha256": "affd21553ba951c0ff0f5a8e40a84ae70d49aaff3c4c69ea4ae1ec897dec21e3",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/predictive-arc/PredictiveArcCanvas.tsx": {
+      "sha256": "ebaa5a1b1f785c7772aaedc2b195318fd63bd9c3e5e5d8e175600968b245dae7",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/predictive-arc/PredictiveArcCollection.tsx": {
+      "sha256": "b77a845ab2fa8e8ef8d9b6812d71efe6f320d865d97ec97b2e15253b5950fd63",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/predictive-arc/predictiveArcRenderer.ts": {
+      "sha256": "fc08c66b13c4a8173c8a88845926b72266d1b1a4fc345c84f44ee61fbfaba92b",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/rectangle-buttons/RectangleButtons.tsx": {
+      "sha256": "f4f3dd8422cd20a464d3d41bbdb9595aeed6beee1efd504754f20a8c2a7de1b0",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/ribbon-field/RibbonFieldBackground.tsx": {
+      "sha256": "fab02cb57c44c7307afd29cd03d01141372ad90163632b9a6a77910a245a5996",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/ribbon-field/ribbonFieldShaders.ts": {
+      "sha256": "ab578acab44bbff7f3cf67f1c82b3e2e1d03689de3fcbdc23681e8b5a0a3536c",
+      "bundles": [
+        "predictive-arc"
+      ]
+    },
+    "src/shaders/section-elements/SectionElements.tsx": {
+      "sha256": "c3602974a5be61abdbb040e7416504e2682f42616d60b6a73437dc3b04637b78",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/section-elements/section-elements.css": {
+      "sha256": "91abd6ed53f463673d0eb2c3c91040c3574287663ca1313e6d92b8448f0b6d11",
+      "bundles": [
+        "rectangle-buttons"
+      ]
+    },
+    "src/shaders/text-path-studies/TextPathStudies.tsx": {
+      "sha256": "049af9bb9116cfdf1a9c502fcc2e605bbef775958c8c9c3853c59123a88b08ba",
+      "bundles": [
+        "globe-study",
+        "outline-typeflow"
+      ]
+    },
+    "src/shaders/text-path-studies/sources/text-on-a-path-ii.html": {
+      "sha256": "2e21ae3b77c3eda7e9189ffb75d5a4c6a7e53f5c44ad78125657051a05b71e72",
+      "bundles": [
+        "globe-study",
+        "outline-typeflow"
+      ]
+    },
+    "src/shaders/text-path-studies/sources/text-on-a-path.html": {
+      "sha256": "e5d01ff0fc47ea3d4f351033c14690efd9d4393ab238ec26a2e090c600be52a5",
+      "bundles": [
+        "globe-study"
+      ]
+    },
+    "src/shaders/threeui.css": {
+      "sha256": "efe4447139f1358dd8e9be68edf6fa46cbefbd1de423a4d6c439ca61d2c8eccf",
+      "bundles": [
+        "character-filmstrip",
+        "cloud-field",
+        "crt",
+        "elemental-flame",
+        "elemental-water",
+        "gallery-heading",
+        "globe-study",
+        "liquid-metal-button",
+        "matrix-field",
+        "outline-typeflow",
+        "predictive-arc",
+        "rectangle-buttons",
+        "threeui-intro"
+      ]
+    }
+  },
+  "missingRawSources": [
+    "src/shaders/character-carousel/sources/character-wave.html",
+    "src/shaders/neuform-isolated/sources/aeonix-ember-storm.html",
+    "src/shaders/neuform-isolated/sources/aetheris-labs.html",
+    "src/shaders/neuform-isolated/sources/audio-wordmark.html",
+    "src/shaders/neuform-isolated/sources/aura-ui-fluid.html",
+    "src/shaders/neuform-isolated/sources/connectivity-graph.html",
+    "src/shaders/neuform-isolated/sources/constellation-field.html",
+    "src/shaders/neuform-isolated/sources/defense-lines.html",
+    "src/shaders/neuform-isolated/sources/diagnostics-panel.html",
+    "src/shaders/neuform-isolated/sources/digital-expanse.html",
+    "src/shaders/neuform-isolated/sources/epilude-footer.html",
+    "src/shaders/neuform-isolated/sources/flow-field.html",
+    "src/shaders/neuform-isolated/sources/flux-vortex.html",
+    "src/shaders/neuform-isolated/sources/gateway-flow.html",
+    "src/shaders/neuform-isolated/sources/glassblown-neon.html",
+    "src/shaders/neuform-isolated/sources/ignition-terminal.html",
+    "src/shaders/neuform-isolated/sources/imaginie-starfield.html",
+    "src/shaders/neuform-isolated/sources/interface-lines.html",
+    "src/shaders/neuform-isolated/sources/julian-vance-nebula.html",
+    "src/shaders/neuform-isolated/sources/kinetic-lathe-certificate.html",
+    "src/shaders/neuform-isolated/sources/lumina-weavers-cloth.html",
+    "src/shaders/neuform-isolated/sources/nexus-tactile.html",
+    "src/shaders/neuform-isolated/sources/nexus-topology.html",
+    "src/shaders/neuform-isolated/sources/particle-drift.html",
+    "src/shaders/neuform-isolated/sources/particle-network.html",
+    "src/shaders/neuform-isolated/sources/performance-gauges.html",
+    "src/shaders/neuform-isolated/sources/platform-core.html",
+    "src/shaders/neuform-isolated/sources/portal-field.html",
+    "src/shaders/neuform-isolated/sources/recursive-erosion.html",
+    "src/shaders/neuform-isolated/sources/skeuomorphic-toggle.html",
+    "src/shaders/neuform-isolated/sources/synthesis-orb.html",
+    "src/shaders/neuform-isolated/sources/thinking-button.html",
+    "src/shaders/neuform-isolated/sources/topo-field.html",
+    "src/shaders/neuform-isolated/sources/valence-core.html",
+    "src/shaders/neuform-isolated/sources/vanguard-dimensional.html",
+    "src/shaders/neuform-isolated/sources/vertex-9.html",
+    "src/shaders/neuform-isolated/sources/wireframe-forms.html"
+  ]
+}

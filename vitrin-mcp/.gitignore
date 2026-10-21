@@ -1,0 +1,17 @@
+node_modules/
+.next/
+coverage/
+*.log
+.DS_Store
+
+# Local credentials and machine-specific configuration.
+.env
+.env.*
+!.env.example
+
+# Vitrin Studio runtime data/output should stay on the user's machine.
+data/
+out/
+tmp/
+
+# Keep the compiled dist/ directory in git: plugin installs and clones run it.
