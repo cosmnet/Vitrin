@@ -4,11 +4,61 @@ import type { Bin } from "./scene3dCore";
 
 export const DUO_ASSET_CREDIT = 'Apple iPhone Duo by zhe_kan · CC-BY-NC-SA-4.0';
 
+/**
+ * A downloaded Duo body, told apart by its display materials. Both ship baked
+ * open and closed GLBs: the open body lies landscape, the closed one portrait.
+ */
+type DuoAssetSpec = {
+  file: (posture: "open" | "closed") => string;
+  credit: string;
+  inner: string;
+  outer: string;
+  /** Source glass that would cover the screenshot. */
+  hidden: string[];
+  /** Body materials the slide's `bodyColor` tints. */
+  isBody: (material: string) => boolean;
+};
+
+const DUO_ASSETS: DuoAssetSpec[] = [
+  {
+    // Sketchfab, extraakash, "Apple iPhone Duo Fold Star White 2026" · Free Standard licence.
+    // Measured 166 × 118 mm open, 85 × 118 mm closed; kept on this machine only
+    // (scripts/import-duo-starwhite-asset.mjs, private/assets-exclude.txt).
+    file: posture => `iphone-duo-starwhite-${posture}.glb`,
+    credit: "Apple iPhone Duo Fold Star White 2026 by extraakash · Sketchfab Free Standard",
+    inner: "C_StarWhite_Screen_Inner",
+    outer: "C_SW_Screen_Outer",
+    hidden: [],
+    isBody: name => name === "C_StarWhite_Side" || name === "C_StarWhite_Backpanel",
+  },
+  {
+    file: posture => `apple-iphone-duo-${posture}.glb`,
+    credit: DUO_ASSET_CREDIT,
+    inner: "Screen.001",
+    outer: "Screen.002",
+    hidden: ["Glass_screen"],
+    isBody: name => name.startsWith("Frame_"),
+  },
+];
+
 export function duoPostureOf(style: DeviceStyle3D): "open" | "closed" {
   return style.duoPosture ?? (style.kind?.includes("cover") ? "closed" : "open");
 }
+/** Candidate model URLs, best first; the first that loads is used. */
+export function duoAssetUrls(style: DeviceStyle3D): string[] {
+  return DUO_ASSETS.map(spec => `/assets/models/${spec.file(duoPostureOf(style))}`);
+}
 export function duoAssetUrl(style: DeviceStyle3D): string {
-  return `/assets/models/apple-iphone-duo-${duoPostureOf(style)}.glb`;
+  return duoAssetUrls(style)[DUO_ASSETS.length - 1];
+}
+
+function specOf(root: THREE.Object3D): DuoAssetSpec {
+  const names = new Set<string>();
+  root.traverse(object => {
+    if (!(object instanceof THREE.Mesh)) return;
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) names.add(material.name);
+  });
+  return DUO_ASSETS.find(spec => names.has(spec.inner)) ?? DUO_ASSETS[DUO_ASSETS.length - 1];
 }
 
 /** Contain the complete screenshot; ClampToEdge fills the small panel margins. */
@@ -26,7 +76,7 @@ function displayUV(raw: ArrayLike<number>, rectAspect: number, tex: THREE.Textur
 
 /** Use the downloaded display's exact geometry; never estimate or stretch the bezel. */
 export function prepareDuoAsset(src: THREE.Group, style: DeviceStyle3D, screenTex: THREE.Texture | null, bin: Bin, outerTex?: THREE.Texture | null): THREE.Group {
-  const root = src.clone(true), posture = duoPostureOf(style);
+  const root = src.clone(true), posture = duoPostureOf(style), spec = specOf(src);
   if (style.kind === "foldable-portrait" && posture === "open" || style.kind === "foldable-cover-landscape" && posture === "closed") root.rotateZ(Math.PI / 2);
   root.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(root), center = bounds.getCenter(new THREE.Vector3());
@@ -39,10 +89,10 @@ export function prepareDuoAsset(src: THREE.Group, style: DeviceStyle3D, screenTe
     if (!(object instanceof THREE.Mesh)) return;
     object.castShadow = true;
     const original = Array.isArray(object.material) ? object.material[0] : object.material;
-    if (original.name === "Screen.001" || original.name === "Screen.002") displays.push({ mesh: object, outer: original.name === "Screen.002", box: new THREE.Box3().setFromObject(object) });
+    if (original.name === spec.inner || original.name === spec.outer) displays.push({ mesh: object, outer: original.name === spec.outer, box: new THREE.Box3().setFromObject(object) });
     // Transparent source glass uses transmission; screenshot glass must not obscure the app.
-    if (original.name === "Glass_screen") object.visible = false;
-    if (style.bodyColor && original.name.startsWith("Frame_")) {
+    if (spec.hidden.includes(original.name)) object.visible = false;
+    if (style.bodyColor && spec.isBody(original.name)) {
       const material = original.clone() as THREE.MeshStandardMaterial;
       material.color.set(style.bodyColor); object.material = material; bin.mats.push(material);
     }
@@ -68,7 +118,7 @@ export function prepareDuoAsset(src: THREE.Group, style: DeviceStyle3D, screenTe
     mesh.name = outer ? "Duo asset outer display" : "Duo asset inner display";
     Object.assign(mesh.userData, { duoDisplay: posture === "closed" || !outer ? "primary" : "outer", duoUv: Array.from(raw), rectAspect });
   }
-  Object.assign(wrap.userData, { modelSource: duoAssetUrl(style), attribution: DUO_ASSET_CREDIT, posture });
+  Object.assign(wrap.userData, { modelSource: `/assets/models/${spec.file(posture)}`, attribution: spec.credit, posture, duoAsset: true });
   return wrap;
 }
 

@@ -1,5 +1,5 @@
 import { buildDuo } from "./duo";
-import { duoAssetUrl, prepareDuoAsset, retargetDuoAssetScreen } from "./duoAsset";
+import { duoAssetUrls, prepareDuoAsset, retargetDuoAssetScreen } from "./duoAsset";
 import { isDuoKind, deviceAspectOf, isTabletKind, type DeviceKind } from "./types";
 // 3D sahne çekirdeği — scene3d (tek kare export) ve scene3dLive (60fps canlı)
 // modüllerinin PAYLAŞTIĞI kurulum kodu: cihaz modeli (varsayılan prosedürel
@@ -1732,8 +1732,12 @@ export async function buildDeviceSource(
   outerTex?: THREE.Texture | null
 ): Promise<THREE.Group | null> {
   if (isDuoKind(style.kind)) {
-    const asset = await loadGlb(duoAssetUrl(style));
-    return asset ? prepareDuoAsset(asset, style, screenTex, bin, outerTex) : null;
+    // Best downloaded body first (a local-only model may be absent), then the bundled one.
+    for (const url of duoAssetUrls(style)) {
+      const asset = await loadGlb(url, { silent: url !== duoAssetUrls(style).at(-1) });
+      if (asset) return prepareDuoAsset(asset, style, screenTex, bin, outerTex);
+    }
+    return null;
   }
   if (style.model === "kontur") return null;
   await ensureModelMeta();
@@ -2069,7 +2073,7 @@ export type StageBuild = {
  * edilir; yoksa iki kırpma üst üste binip görüntü fazladan yakınlaşırdı.
  */
 function retargetScreen(phone: THREE.Object3D, tex: THREE.Texture, bin: Bin): void {
-  if (phone.userData.modelSource?.includes("apple-iphone-duo")) { retargetDuoAssetScreen(phone, tex, bin); return; }
+  if (phone.userData.duoAsset) { retargetDuoAssetScreen(phone, tex, bin); return; }
   const plane = phone.getObjectByName(SCREEN_MESH_NAME);
   if (!(plane instanceof THREE.Mesh)) return;
 

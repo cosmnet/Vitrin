@@ -52,3 +52,6 @@ vitrin-studio/scripts/materialize-validation.mjs
 
 # Tanıtım görselleri (yerel)
 /tanitim/
+
+# Downloaded third-party 3D sources (licences forbid redistribution as-is)
+model-downloads/
