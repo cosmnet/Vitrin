@@ -25,7 +25,7 @@ export const BASE_H = 2868;
    temalar 1320 enine göre ayarlı; iPad'de aynı punto genişliğe göre biraz
    küçük durur — App Store iPad setlerinde zaten öyle, geniş tuvalde başlık
    ekranın %9'unu değil ~%7.7'sini kaplar. */
-export type Format = "iphone" | "ipad" | "ipad-landscape" | "iphone-duo" | "iphone-duo-portrait" | "iphone-duo-cover" | "iphone-duo-cover-landscape";
+export type Format = "iphone" | "ipad" | "ipad-landscape" | "iphone-duo" | "iphone-duo-portrait" | "iphone-duo-cover" | "iphone-duo-cover-landscape" | "creative-header" | "creative-search";
 export type DeviceKind = "phone" | "tablet" | "tablet-landscape" | "foldable" | "foldable-portrait" | "foldable-cover" | "foldable-cover-landscape";
 
 export const FORMATS: Record<
@@ -71,9 +71,18 @@ export const FORMATS: Record<
   "iphone-duo-portrait": { label: L("iPhone Duo · iç ekran · portre", "iPhone Duo · inner screen · portrait"), base: { w: 1338, h: 1902 }, deviceAspect: 117.8 / 164.6, kind: "foldable-portrait", exportSize: "duo-inner" },
   "iphone-duo-cover": { label: L("iPhone Duo · dış ekran · portre", "iPhone Duo · outer screen · portrait"), base: { w: 1398, h: 2034 }, deviceAspect: 84.1 / 117.8, kind: "foldable-cover", exportSize: "duo-outer" },
   "iphone-duo-cover-landscape": { label: L("iPhone Duo · dış ekran · yatay", "iPhone Duo · outer screen · landscape"), base: { w: 2034, h: 1398 }, deviceAspect: 117.8 / 84.1, kind: "foldable-cover-landscape", exportSize: "duo-outer-land" },
+  // App Store yaratıcı varlıkları (iOS 27): ürün sayfası başlığı 21:9 ve arama
+  // sonucu 3:2. Cihaz telefondur, tuval cihaz oranında DEĞİLDİR — özdeşlik
+  // bilerek bozulur, düzenler `creativeLayout` ile ayrı bütçelenir. Taban
+  // yüksekliği 1320: iPhone tuvalinin enine göre ayarlı punto kısa kenara oturur.
+  // Apple'ın güvenli alanları (merkez): başlık 1646×661 / 3840×1646,
+  // arama 2168×1030 / 3840×2560.
+  "creative-header": { label: L("Ürün sayfası başlığı · 21:9", "Product page header · 21:9"), base: { w: 3080, h: 1320 }, deviceAspect: 0.4603, kind: "phone", exportSize: "creative-header" },
+  "creative-search": { label: L("Arama sonucu görseli · 3:2", "Search results asset · 3:2"), base: { w: 1980, h: 1320 }, deviceAspect: 0.4603, kind: "phone", exportSize: "creative-search" },
 };
 
 export function isDuoFormat(format?: Format): boolean { return !!format?.startsWith("iphone-duo"); }
+export function isCreativeFormat(format?: Format): boolean { return !!format?.startsWith("creative-"); }
 export function isDuoKind(kind?: DeviceKind): boolean { return !!kind?.startsWith("foldable"); }
 /** Saf ekran sunumu: App Store screenshot oranı, kasa oranından ayrıdır. */
 export function duoScreenAspectOf(kind?: DeviceKind): number {
@@ -123,6 +132,8 @@ export const EXPORT_SIZES = {
   "duo-inner-land": { w: 2853, h: 2007, label: L("Duo · iç ekran · yatay", "Duo · inner screen · landscape") },
   "duo-outer": { w: 1398, h: 2034, label: L("Duo · dış ekran · portre", "Duo · outer screen · portrait") },
   "duo-outer-land": { w: 2034, h: 1398, label: L("Duo · dış ekran · yatay", "Duo · outer screen · landscape") },
+  "creative-header": { w: 3840, h: 1646, label: L("Ürün sayfası başlığı", "Product page header") },
+  "creative-search": { w: 3840, h: 2560, label: L("Arama sonucu görseli", "Search results asset") },
 } as const;
 export type ExportSizeId = keyof typeof EXPORT_SIZES;
 

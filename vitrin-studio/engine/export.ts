@@ -71,6 +71,7 @@ export const SIZE_SUFFIX: Record<ExportSizeId, string> = {
   "ipad-13": "ipad13",
   "ipad-13-land": "ipad13land",
   "duo-inner": "duoinner", "duo-inner-land": "duoinnerland", "duo-outer": "duoouter", "duo-outer-land": "duoouterland",
+  "creative-header": "header", "creative-search": "search",
 };
 
 // toUpperCase/normalize'ın çözemediği harfler (ı/İ NFD'de ayrışmaz).

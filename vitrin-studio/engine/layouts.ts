@@ -7,7 +7,7 @@
 //   device.rotation  → radyan (saat yönü tersi negatif)
 //   textZ            → çakışmada metin cihazın üstünde mi ("above" varsayılan)
 
-import { isDuoFormat, type Format, type LayoutId, type LayoutSpec } from "./types";
+import { isCreativeFormat, isDuoFormat, type Format, type LayoutId, type LayoutSpec } from "./types";
 
 export const LAYOUTS: Record<LayoutId, LayoutSpec> = {
   // Başlık üstte nefes alan bir bantta, cihaz alt-orta. En güvenli okunabilirlik.
@@ -473,6 +473,7 @@ export const LAYOUTS: Record<LayoutId, LayoutSpec> = {
 export function getLayoutForFormat(id: LayoutId, format: Format = "iphone"): LayoutSpec {
   const layout = LAYOUTS[id];
   if (format === "iphone") return layout;
+  if (isCreativeFormat(format)) return creativeLayout(id, format, layout);
   if (isDuoFormat(format)) {
     const landscape = format === "iphone-duo" || format.endsWith("landscape");
     if (id === "wide-left" || id === "wide-right") {
@@ -504,4 +505,34 @@ export function getLayoutForFormat(id: LayoutId, format: Format = "iphone"): Lay
     device: { cx: 0.5, cy: 0.72, scale: 0.67 },
   };
   return layout;
+}
+
+/** App Store yaratıcı varlıkları. Tuval cihaz oranında olmadığı için telefonun
+ *  eni tuvalin `scale × (H/W) × 0.46`'sı kadardır (başlıkta 0.197·scale,
+ *  aramada 0.307·scale) — LAYOUTS'un "en = scale" bütçesi burada geçmez.
+ *
+ *  Başlık (21:9): iPhone ürün sayfası ortadaki ~1646 px sütunu gösterir; üstü
+ *  durum çubuğu, altı simge/ad/Al katmanı altında kalır. Ana telefon o
+ *  sütunda tam boy durur (D-pad güvenli bandın ortasına düşer), yan
+ *  telefonlar yalnız iPad'in geniş kadrajında görünür.
+ *  Arama (3:2): metin ve ana telefon güvenli alanın içinde (x .218–.782,
+ *  y .299–.701); ikinci telefon arkada, kenara taşabilir. */
+function creativeLayout(id: LayoutId, format: Format, layout: LayoutSpec): LayoutSpec {
+  if (format === "creative-header") return {
+    ...layout,
+    text: { x: 0.36, y: 0.06, w: 0.28, align: "center" },
+    device: { cx: 0.5, cy: 0.55, scale: 1.0 },
+    device2: { cx: 0.255, cy: 0.6, scale: 0.88, rotation: -0.055 },
+    device3: { cx: 0.745, cy: 0.6, scale: 0.88, rotation: 0.055 },
+    textZ: "below",
+  };
+  const left = id !== "wide-right";
+  return {
+    ...layout,
+    text: { x: left ? 0.225 : 0.445, y: 0.37, w: 0.33, align: left ? "left" : "right" },
+    device: { cx: left ? 0.68 : 0.32, cy: 0.56, scale: 0.78 },
+    device2: { cx: left ? 0.865 : 0.135, cy: 0.6, scale: 0.7, rotation: left ? 0.05 : -0.05 },
+    device3: undefined,
+    textZ: "above",
+  };
 }
