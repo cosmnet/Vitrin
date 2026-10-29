@@ -70,6 +70,7 @@ let _envTex: THREE.Texture | null = null;
 
 const SS = 2; // süpersampling çarpanı — 2x render + downscale = jaggysiz kenar
 const MAX_BUFFER = 8192; // drawing-buffer üst sınırı (GPU limitiyle ayrıca kısılır)
+const MAX_BUFFER_AREA = 8192 * 4096 * 0.9; // tarayıcının tampon alanı sınırının altında kal
 /** Offline DoF tap sayısı — SABİT (deterministik). Canlı yol 13 kullanır. */
 const DOF_TAPS = 39;
 
@@ -140,8 +141,11 @@ async function renderDevice3DAt(req: Device3DRequest): Promise<HTMLCanvasElement
   const orbit = resolveOrbit(style, preset);
 
   // 2x süpersampling (draft'ta 1x) — GPU'nun izin verdiği buffer sınırına kadar.
+  // Alan sınırı ayrıca: Chrome çizim tamponunun ALANINI sessizce kısar
+  // (~8192×4096); aşılınca kare sol üstten kesilip gerilir, cihaz büyür ve
+  // kayar. 3840×2560 arama görseli 2x'te buna takılıyordu.
   const cap = Math.min(MAX_BUFFER, renderer.capabilities.maxTextureSize || 4096);
-  const rs = Math.max(0.25, Math.min(draft ? 1 : SS, cap / Math.max(W, H)));
+  const rs = Math.max(0.25, Math.min(draft ? 1 : SS, cap / Math.max(W, H), Math.sqrt(MAX_BUFFER_AREA / (W * H))));
   const rw = Math.max(1, Math.round(W * rs));
   const rh = Math.max(1, Math.round(H * rs));
   // Kadraj REFERANS kutuya göre kurulur; çoklu cihazda o, kutu listesinin
