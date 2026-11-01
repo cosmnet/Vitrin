@@ -388,6 +388,12 @@ export function ExportDialog({
           label={`${prog.done}/${prog.total} · ${prog.current}`}
         />
       )}
+      <p className="note export-dest">
+        <Icon name="folder" size={11} /> {L("Çıktı", "Output")}: <code>VITRIN APP/Projects/{project.app}/{allLocales ? L("<dil>", "<locale>") : project.activeLocale}</code>
+        <button type="button" className="btn xs ghost" onClick={() => void api(`/api/export?reveal=1&app=${encodeURIComponent(project.app)}`, undefined, "GET").catch(() => {})}>
+          {L("Klasörü aç", "Open folder")}
+        </button>
+      </p>
       {result && <p className="note ok">{L("Yazıldı", "Written")}: {result}</p>}
       {err && <p className="inline-err">{err}</p>}
       <div className="foot">
@@ -675,251 +681,6 @@ function VideoPanel({ close }: { close: () => void }) {
 }
 
 /* ---------- Projeler ---------- */
-/**
- * Dil künyesi — 26 dilin tamamı yazılırsa satır taşar, tarih ve aksiyonlar
- * kırpılırdı (kullanıcı bu yüzden projeleri silemiyordu). Sayı önde,
- * ilk birkaç kod örnek olarak arkada.
- */
-function localeBadge(locales: string[]): string {
-  if (!locales.length) return L("dil yok", "no languages");
-  const head = locales.slice(0, 4).join(", ");
-  const rest = locales.length - 4;
-  return `${locales.length} ${L("dil", "languages")} · ${head}${rest > 0 ? ` +${rest}` : ""}`;
-}
-
-type ProjectSummary = { id: string; app: string; createdAt: string; locales: string[]; format?: Format };
-
-export function ProjectsDialog({ close }: { close: () => void }) {
-  const loadProject = useStudio((s) => s.loadProject);
-  const newProject = useStudio((s) => s.newProject);
-  const project = useStudio((s) => s.project);
-  const [list, setList] = useState<ProjectSummary[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [err, setErr] = useState("");
-  const [q, setQ] = useState("");
-  /** Yeniden adlandırılan projenin id'si — satır yerinde input'a döner. */
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [creating,setCreating]=useState(false);
-  const [newName,setNewName]=useState(L("Yeni Uygulama", "New App"));
-  const [newFormat,setNewFormat]=useState<Format>("iphone");
-
-  const refresh = () =>
-    api<{ projects: ProjectSummary[] }>("/api/projects")
-      .then((r) => { setList(r.projects); setLoaded(true); })
-      .catch((e) => setErr(String(e)));
-
-  useEffect(() => {
-    refresh();
-  }, []);
-
-  const shown = useMemo(() => {
-    const needle = q.trim().toLocaleLowerCase("tr");
-    if (!needle) return list;
-    return list.filter(
-      (p) =>
-        p.app.toLocaleLowerCase("tr").includes(needle) ||
-        p.locales.some((l) => l.toLowerCase().includes(needle))
-    );
-  }, [list, q]);
-
-  /**
-   * Çoğaltma — R14. Aynı proje yeni id ile; `format` verilirse o formata
-   * geçirilir (iPhone setinden iPad seti: metin/kurgu/ekranlar aynen taşınır,
-   * kullanıcı iPad ekranlarını sonra atar). Ekran havuzu paylaşılmaz,
-   * kopyalanır: iki proje birbirinden bağımsız yaşar.
-   */
-  const duplicate = async (p: ProjectSummary, format?: Format) => {
-    setBusy(true);
-    try {
-      const r = await api<{ project: Project }>(`/api/projects?id=${p.id}`);
-      const src = r.project;
-      const label = format && format !== formatOf(src) ? FORMATS[format].label : L("kopya", "copy");
-      const app = `${src.app} (${label})`;
-      const copy: Project = {
-        ...structuredClone(src),
-        id: uid(),
-        app,
-        createdAt: new Date().toISOString(),
-        format: format ?? formatOf(src),
-      };
-      copy.sets = Object.fromEntries(
-        Object.entries(copy.sets).map(([code, set]) => [code, { ...set, app }])
-      );
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(copy),
-      });
-      await refresh();
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /**
-   * Yeniden adlandırma. Ayrı bir uç nokta yok: projeyi çek, adı (ve her dil
-   * setinin adını) değiştir, aynı id ile geri yaz. Açık olan proje ise
-   * bellekteki kopya da tazelenir, yoksa ekranda eski ad kalırdı.
-   */
-  const rename = async (p: ProjectSummary, name: string) => {
-    const next = name.trim();
-    setEditing(null);
-    if (!next || next === p.app) return;
-    setBusy(true);
-    try {
-      const r = await api<{ project: Project }>(`/api/projects?id=${p.id}`);
-      const updated: Project = { ...r.project, app: next };
-      updated.sets = Object.fromEntries(
-        Object.entries(updated.sets).map(([code, set]) => [code, { ...set, app: next }])
-      );
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(updated),
-      });
-      if (p.id === project.id) loadProject(updated);
-      await refresh();
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Overlay close={close}>
-      <Title icon="folder">{L("Projeler", "Projects")}</Title>
-      {err && <p className="inline-err">{err}</p>}
-      {loaded && list.length === 0 && (
-        <p className="note">{L("Kayıtlı proje yok. Düzenlemeler otomatik kaydedilir.", "No saved projects. Edits are saved automatically.")}</p>
-      )}
-
-      {list.length > 6 && (
-        <input
-          className="inp"
-          style={{ marginBottom: 8 }}
-          placeholder={L("Proje ya da dil ara…", "Search projects or languages…")}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-      )}
-
-      {list.length > 0 && shown.length === 0 && (
-        <p className="note">{L(`“${q}” ile eşleşen proje yok.`, `No project matches “${q}”.`)}</p>
-      )}
-
-      {shown.map((p) => (
-        <div key={p.id} className={`prow${p.id === project.id ? " on" : ""}`}>
-          {editing === p.id ? (
-            <input
-              className="prow-rename"
-              autoFocus
-              value={draft}
-              disabled={busy}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void rename(p, draft);
-                if (e.key === "Escape") setEditing(null);
-              }}
-              onBlur={() => void rename(p, draft)}
-            />
-          ) : (
-            /* Aktif proje Klein DEĞİL: Klein kotası tek birincil aksiyona
-               ("Kapat") ayrıldı; aktiflik mono künyeyle söylenir. */
-            <button
-              className="prow-main"
-              title={`${p.app} — ${p.locales.join(", ")}`}
-              onClick={async () => {
-                const r = await api<{ project: Project }>(`/api/projects?id=${p.id}`);
-                loadProject(r.project);
-                close();
-              }}
-            >
-              <span className="prow-name">
-                {p.app}
-                {p.id === project.id && <em className="cnt"> {L("AKTİF", "ACTIVE")}</em>}
-              </span>
-              <span className="prow-meta">
-                {FORMATS[p.format ?? "iphone"].label} · {localeBadge(p.locales)} · {p.createdAt.slice(0, 10)}
-              </span>
-            </button>
-          )}
-
-          <span className="prow-acts">
-            <button className="btn sm" title={L("iPhone Duo kopyası oluştur", "Create iPhone Duo copy")} disabled={busy} onClick={() => void duplicate(p, "iphone-duo")}><Icon name="cube" size={13}/></button>
-            <button className="btn sm" title={L("Çoğalt", "Duplicate")} disabled={busy} onClick={() => void duplicate(p)}>
-              <Icon name="copy" size={13} />
-            </button>
-            <button
-              className="btn sm"
-              title={
-                (p.format ?? "iphone") === "ipad" ? L("iPhone kopyası oluştur", "Create iPhone copy") : L("iPad kopyası oluştur", "Create iPad copy")
-              }
-              disabled={busy}
-              onClick={() => void duplicate(p, (p.format ?? "iphone") === "ipad" ? "iphone" : "ipad")}
-            >
-              <Icon name="frame" size={13} />
-            </button>
-            <button
-              className="btn sm"
-              title={L("Yeniden adlandır", "Rename")}
-              disabled={busy}
-              onClick={() => {
-                setDraft(p.app);
-                setEditing(editing === p.id ? null : p.id);
-              }}
-            >
-              <Icon name="type" size={13} />
-            </button>
-            <button
-              className="btn sm danger"
-              title={L("Projeyi sil", "Delete project")}
-              disabled={busy}
-              onClick={async () => {
-                if (
-                  !(await confirmUi({
-                    title: L("Projeyi sil", "Delete project"),
-                    message: L(`"${p.app}" projesi (${p.locales.length} dil) silinsin mi? Geri alınamaz.`, `Delete project "${p.app}" (${p.locales.length} languages)? This cannot be undone.`),
-                    okLabel: L("Sil", "Delete"),
-                    danger: true,
-                  }))
-                )
-                  return;
-                await fetch(`/api/projects?id=${p.id}`, { method: "DELETE" });
-                refresh();
-              }}
-            >
-              <Icon name="trash" size={13} />
-            </button>
-          </span>
-        </div>
-      ))}
-      <p className="note" style={{ marginTop: 12 }}>
-        {LANG === "en" ? (
-          <>The template gallery is in the <b>Template</b> drawer on the left.</>
-        ) : (
-          <>Şablon galerisi soldaki <b>Şablon</b> çekmecesinde.</>
-        )}
-      </p>
-
-      {creating && <form className="new-project-form" onSubmit={e=>{e.preventDefault();if(newName.trim()){newProject(newName.trim(),newFormat);close();}}}>
-        <h3>{L("Yeni bir vitrin oluştur", "Create a new showcase")}</h3><label className="field">{L("Uygulama adı", "App name")}<input aria-label={L("Yeni proje adı", "New project name")} value={newName} onChange={e=>setNewName(e.target.value)} autoFocus/></label>
-        <FormatCards value={newFormat} onChange={setNewFormat}/><button type="submit" className="btn primary wide">{L("Projeyi oluştur", "Create project")}</button>
-      </form>}
-      <div className="foot">
-        <button className="btn" onClick={()=>setCreating(!creating)}><Icon name="plus" size={13}/>{L("Yeni proje", "New project")}</button>
-        <button className="btn primary" onClick={close}>
-          {L("Kapat", "Close")}
-        </button>
-      </div>
-    </Overlay>
-  );
-}
-
 /* ---------- Ayarlar ---------- */
 
 const SETTING_KEYS = [
@@ -1012,7 +773,7 @@ export function SettingsDialog({ close }: { close: () => void }) {
         <p className="note" style={{ marginTop: 14, overflowWrap: "anywhere" }}>
           Vitrin Studio {info.version}{info.assets ? ` · ${L("varlıklar", "assets")} ${info.assets}` : ""}
           <br />
-          {L("Projeler", "Projects")}: <code>{info.dir}/data/projects</code> · Export: <code>~/Desktop/Vitrin</code>
+          {L("Projeler", "Projects")}: <code>{info.dir}/data/projects</code> · Export: <code>{info.dir}/../Projects</code>
           <br />
           {L("Güncellemek için kurulum komutunu yeniden çalıştır:", "To update, re-run the install command:")}{" "}
           <a href={L("https://github.com/cosmnet/Vitrin#kurulum--tek-satır", "https://github.com/cosmnet/Vitrin#install--one-line")} target="_blank" rel="noreferrer">github.com/cosmnet/Vitrin</a>

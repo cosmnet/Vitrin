@@ -45,7 +45,10 @@ export type Device3DRequest = {
   style: DeviceStyle3D;
   width: number; // dönen katmanın toplam boyutu (slayt boyutu)
   height: number;
-  box: { cx: number; cy: number; h: number }; // cihazın slayt içindeki merkez + hedef piksel yüksekliği
+  box: { cx: number; cy: number; h: number; yaw?: number; pitch?: number }; // cihazın slayt içindeki merkez + hedef piksel yüksekliği (+ v1.0 kendi dönüşü, rad)
+  /** v1.0 — kutu başına stil (Duo'da cihaz başına açık/kapalı). Yalnız
+   *  `boxes` ile birlikte anlamlı; yoksa tüm kopyalar `style`'ı paylaşır. */
+  styles?: DeviceStyle3D[];
   /**
    * LAYOUT TABANLI ÇOKLU CİHAZ (R10/E): slayt-piksel kutuları. İlk eleman
    * `box` ile aynı olmalı — kadraj ona göre kurulur, kalanlar ona göre
@@ -184,6 +187,18 @@ async function renderDevice3DAt(req: Device3DRequest): Promise<HTMLCanvasElement
     // --- Cihaz kaynağı: kontur (açık tercih) → null/prosedürel; "real"/glb → GLB,
     // yüklenemezse yine kontur.
     const source = await buildDeviceSource(style, tex, bin, texOf(req.screenshots?.[1] ?? null));
+    // v1.0 — ayrışan kutu stilleri için kendi gövdeleri (aynı duruş tek kez kurulur).
+    let sources: (THREE.Group | null)[] | undefined;
+    if (req.styles && req.boxes && req.boxes.length > 1) {
+      const memo = new Map<string, THREE.Group | null>();
+      sources = [];
+      for (let i = 0; i < req.boxes.length; i++) {
+        const st = req.styles[i] ?? style;
+        const key = `${st.kind}|${st.duoPosture ?? ""}|${st.model ?? ""}|${st.glb ?? ""}`;
+        if (!memo.has(key)) memo.set(key, await buildDeviceSource(st, texOf(req.screenshots?.[i] ?? null) ?? tex, bin, texOf(req.screenshots?.[1] ?? null)));
+        sources.push(memo.get(key) ?? null);
+      }
+    }
 
     // --- Layout tabanlı çoklu cihaz: kutular RENDER pikseline ölçeklenir
     // (süpersampling çarpanı rs), instance listesi onlardan türetilir.
@@ -194,6 +209,8 @@ async function renderDevice3DAt(req: Device3DRequest): Promise<HTMLCanvasElement
             cy: b.cy * rs,
             h: b.h * rs * preset.fit,
             rotation: b.rotation,
+            yaw: b.yaw,
+            pitch: b.pitch,
           }))
         : null;
 
@@ -209,8 +226,14 @@ async function renderDevice3DAt(req: Device3DRequest): Promise<HTMLCanvasElement
       screenTex: tex,
       rig,
       bin,
-      instances: boxes ? instancesFromBoxes(boxes) : undefined,
+      instances: boxes
+        ? instancesFromBoxes(boxes)
+        : req.box.yaw || req.box.pitch
+          ? preset.instances.map((inst, i) => (i === 0 ? { ...inst, ry: inst.ry + (req.box.yaw ?? 0), rx: req.box.pitch ?? 0 } : inst))
+          : undefined,
       screenTexes,
+      sources,
+      styles: sources ? req.styles : undefined,
     });
     stage.updateShadow(orbit);
     scene.add(stage.root);

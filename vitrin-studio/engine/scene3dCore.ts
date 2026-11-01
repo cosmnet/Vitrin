@@ -112,6 +112,9 @@ export type Instance = {
   /** Bu kopyanın ölçek çarpanı (vars. 1). Layout kutuları farklı boyda telefon
    *  isteyebilir; gölge katmanı da bu çarpanla ölçeklenir. */
   s?: number;
+  /** Öne/arkaya yatış (rad) — v1.0 cihaz başına pitch. Euler sırası YXZ:
+   *  önce roll, sonra pitch, en son dünya dikeyinde yaw. */
+  rx?: number;
 };
 
 /** Ekran düzlemi ve cam şeridi klonda ADLA bulunur — kopya başına farklı
@@ -2052,7 +2055,7 @@ export type StageBuild = {
   /** i. cihazı (gölgesiyle birlikte) root-YEREL konuma taşır ve şeklini
    *  günceller. Piksel eşlemeli split yerleşimi kamera kurulduktan SONRA
    *  çağırır; `centers` da güncellenir (DoF odağı doğru kalsın). */
-  placeInstance(i: number, p: { x: number; y: number; z: number; s: number; ry: number; rz: number }): void;
+  placeInstance(i: number, p: { x: number; y: number; z: number; s: number; ry: number; rz: number; rx?: number }): void;
   /** Zemin/ayna düzlemini cihazların GÜNCEL altlarına göre yeniden hizalar. */
   refreshFloor(): void;
   /** Kaba sahne küresi — near/far için. Box3 taramasından çok daha ucuz;
@@ -2141,6 +2144,11 @@ export function assembleStage(opts: {
   /** i. kopyanın ekran dokusu; yoksa ortak `screenTex`. Aynı karede FARKLI
    *  ekran görüntüleri bu listeyle gelir. */
   screenTexes?: (THREE.Texture | null)[];
+  /** v1.0 — i. kopyanın kendi gövdesi (ör. Duo'da biri açık biri kapalı).
+   *  Yoksa ortak `source`. */
+  sources?: (THREE.Group | null)[];
+  /** v1.0 — i. kopyanın kendi stili (tür/duruş). Yoksa ortak `style`. */
+  styles?: DeviceStyle3D[];
 }): StageBuild {
   const { style, preset, source, screenTex, rig, bin } = opts;
   const insts = opts.instances ?? preset.instances;
@@ -2175,10 +2183,14 @@ export function assembleStage(opts: {
     // telefon zaten kopya başına kurulduğu için doku doğrudan geçer; GLB
     // yolunda paylaşımlı klonun ekranı retargetScreen ile ayrıştırılır.
     const texI = opts.screenTexes ? (opts.screenTexes[i] ?? screenTex) : screenTex;
-    const phone = source ? source.clone(true) : isDuoKind(style.kind) ? buildDuo(style, texI, bin, opts.screenTexes?.[1]) : buildPhone(style, texI, bin);
-    if (source && texI && texI !== screenTex) retargetScreen(phone, texI, bin);
+    const styleI = opts.styles?.[i] ?? style;
+    const own = opts.sources ? opts.sources[i] !== undefined : false;
+    const srcI = own ? opts.sources![i] : source;
+    const phone = srcI ? srcI.clone(true) : isDuoKind(styleI.kind) ? buildDuo(styleI, texI, bin, opts.screenTexes?.[1]) : buildPhone(styleI, texI, bin);
+    if (srcI && texI && (own || texI !== screenTex)) retargetScreen(phone, texI, bin);
     phone.position.set(inst.x, inst.y, inst.z);
-    phone.rotation.set(0, inst.ry, inst.rz ?? 0);
+    phone.rotation.order = "YXZ";
+    phone.rotation.set(inst.rx ?? 0, inst.ry, inst.rz ?? 0);
     if (sc !== 1) phone.scale.setScalar(sc);
     deviceRoot.add(phone);
     phones.push(phone);
@@ -2212,7 +2224,7 @@ export function assembleStage(opts: {
       const m = new THREE.Mesh(geo, mat);
       // Halo katmanı daha da dağılsın; temas katmanı sıkı kalsın.
       const k = (id === "contact" ? 1 : spread) * (1 + (fSc - 1) * fl);
-      const bx = bodyDimsOf(style.kind).W * sx * k;
+      const bx = bodyDimsOf(styleI.kind).W * sx * k;
       const by = BODY_H * sy * (id === "contact" ? 1 : spread * 0.9 + 0.1) * (1 + (fSc - 1) * fl);
       m.scale.set(bx, by, 1);
       m.position.z = dz;
@@ -2254,7 +2266,8 @@ export function assembleStage(opts: {
     if (!r) return;
     r.s = p.s;
     r.phone.position.set(p.x, p.y, p.z);
-    r.phone.rotation.set(0, p.ry, p.rz);
+    r.phone.rotation.order = "YXZ";
+    r.phone.rotation.set(p.rx ?? 0, p.ry, p.rz);
     r.phone.scale.setScalar(p.s);
     centers[i].set(p.x, p.y, p.z);
     if (r.yaw) {
@@ -2327,7 +2340,7 @@ export function assembleStage(opts: {
 //   olmaz — kutular kayardı.)
 
 /** Layout kutusu, RENDER pikseli cinsinden. */
-export type PixelBox = { cx: number; cy: number; h: number; rotation?: number };
+export type PixelBox = { cx: number; cy: number; h: number; rotation?: number; yaw?: number; pitch?: number };
 
 /**
  * Kutu SIRASINA göre derinlik kademesi (dünya birimi, BODY_H = 2.16).
@@ -2409,9 +2422,12 @@ export function placeByPixels(
     const s = i === 0 || !(h0 > 0) ? 1 : b.h / h0;
     const rz = -(b.rotation ?? 0); // canvas'ta + = saat yönü, three'de tersi
     // Sağa düşen telefon SOLA döner (merkeze bakar) → ry negatif.
-    const ry = -THREE.MathUtils.clamp((b.cx - boxes[0].cx) / refW, -1.5, 1.5) * TOE_IN;
+    // v1.0: kutunun kendi yaw/pitch'i toe-in'in ÜSTÜNE biner. Eskiden burada
+    // yalnız toe-in yazılıyordu — cihaz başına 3D dönüş sessizce yok sayılıyordu.
+    const ry = -THREE.MathUtils.clamp((b.cx - boxes[0].cx) / refW, -1.5, 1.5) * TOE_IN + (b.yaw ?? 0);
+    const rx = b.pitch ?? 0;
     if (i === 0 || !usable) {
-      stage.placeInstance(i, { x: 0, y: 0, z: 0, s, ry, rz });
+      stage.placeInstance(i, { x: 0, y: 0, z: 0, s, ry, rz, rx });
       continue;
     }
     // Düzlem-içi hedef (derinlik olmasaydı olması gereken yer).
@@ -2428,7 +2444,7 @@ export function placeByPixels(
       .addScaledVector(up, t * f + Y0 * (f - 1))
       .addScaledVector(fwd, dz)
       .applyQuaternion(q);
-    stage.placeInstance(i, { x: w.x, y: w.y, z: w.z, s: s * f, ry, rz });
+    stage.placeInstance(i, { x: w.x, y: w.y, z: w.z, s: s * f, ry, rz, rx });
   }
   stage.refreshFloor();
 }
@@ -2442,7 +2458,8 @@ export function instancesFromBoxes(boxes: PixelBox[]): Instance[] {
     x: 0,
     y: 0,
     z: 0,
-    ry: 0,
+    ry: b.yaw ?? 0,
+    rx: b.pitch ?? 0,
     s: i === 0 || !(h0 > 0) ? 1 : b.h / h0,
     rz: -(b.rotation ?? 0),
   }));

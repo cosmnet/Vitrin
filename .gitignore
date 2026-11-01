@@ -50,8 +50,15 @@ vitrin-studio/public/landing/
 vitrin-studio/PLAN.md
 vitrin-studio/scripts/materialize-validation.mjs
 
+# Dışa aktarılan PNG/video çıktıları (v1.0: proje kökünde)
+/Projects/
+
 # Tanıtım görselleri (yerel)
 /tanitim/
 
 # Downloaded third-party 3D sources (licences forbid redistribution as-is)
 model-downloads/
+
+# f:x vitrin seti (yerel)
+vitrin-studio/app/fix-final/
+vitrin-studio/engine/fixFinal.ts

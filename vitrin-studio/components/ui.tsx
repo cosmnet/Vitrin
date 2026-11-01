@@ -83,6 +83,16 @@ function fetchAssets(): Promise<AssetList> {
   return assetPromise;
 }
 
+const assetListeners = new Set<(a: AssetList) => void>();
+
+/** Envanteri yeniden okur; yeni yüklenen görsel çekmecelerde hemen görünür. */
+export async function refreshAssets(): Promise<void> {
+  assetCache = null;
+  assetPromise = null;
+  const a = await fetchAssets();
+  for (const l of assetListeners) l(a);
+}
+
 /** public/assets envanteri (bg, textures, generated, plates2, models). */
 export function useAssets(): AssetList {
   const [assets, setAssets] = useState<AssetList>(assetCache ?? EMPTY_ASSETS);
@@ -91,8 +101,10 @@ export function useAssets(): AssetList {
     fetchAssets().then((a) => {
       if (!dead) setAssets(a);
     });
+    assetListeners.add(setAssets);
     return () => {
       dead = true;
+      assetListeners.delete(setAssets);
     };
   }, []);
   return assets;

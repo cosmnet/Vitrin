@@ -346,6 +346,34 @@ export function deviceStyleForFormat(style: DeviceStyle, format?: Format): Devic
   return { ...style, kind };
 }
 
+/**
+ * v1.0 — CİHAZ BAŞINA DURUŞ. Çoklu cihazlı Duo karesinde biri açık biri
+ * kapalı olabilir: `off.posture` verilmişse yalnız o cihazın stili ona göre
+ * kurulur (3D'de gövde/GLB, 2D'de silüet türü). Verilmemişse slaydın ortak
+ * stili aynen döner — eski projeler bit-bit aynı basar.
+ */
+export function deviceStyleForSlot(style: DeviceStyle, format: Format | undefined, off?: { posture?: "open" | "closed" } | null): DeviceStyle & { kind: DeviceKind } {
+  const base = deviceStyleForFormat(style, format);
+  const posture = off?.posture;
+  if (!posture || !isDuoFormat(format)) return base;
+  if (style.mode === "3d") {
+    if ((style.duoPosture ?? (kindOfFormat(format).includes("cover") ? "closed" : "open")) === posture) return base;
+    return deviceStyleForFormat({ ...style, duoPosture: posture, kind: undefined }, format);
+  }
+  const fk = kindOfFormat(format);
+  const kind: DeviceKind = posture === "closed"
+    ? (fk.includes("cover") ? fk : "foldable-cover")
+    : (fk.includes("cover") ? "foldable-portrait" : fk);
+  return { ...base, kind };
+}
+
+/** Duo'da cihazın etkin duruşu (cihaz başına ayar > slayt stili > format). */
+export function duoPostureOfSlot(style: DeviceStyle, format: Format | undefined, off?: { posture?: "open" | "closed" } | null): "open" | "closed" {
+  if (off?.posture) return off.posture;
+  if (style.mode === "3d" && style.duoPosture) return style.duoPosture;
+  return kindOfFormat(format).includes("cover") ? "closed" : "open";
+}
+
 // ---------- Tipografi / Layout ----------
 export type TextStyle = {
   fontFamily: string;               // engine/fonts.ts registry'sindeki family adı
@@ -356,7 +384,34 @@ export type TextStyle = {
   letterSpacing?: number;           // px (negatif olabilir)
   color: string;
   align?: "left" | "center" | "right";
-  transform?: "none" | "uppercase";
+  transform?: "none" | "uppercase" | "lowercase" | "capitalize";
+  /** v1.0 — metin opaklığı 0..1 (vars. 1). */
+  opacity?: number;
+  /** v1.0 — gölge, BASE px. Yoksa gölge yok (eski çıktı bit-bit aynı). */
+  shadow?: { color: string; blur: number; dx: number; dy: number };
+  /** v1.0 — dış kontur (harf kenarı), BASE px. 0/yok = kapalı. */
+  strokeColor?: string;
+  strokeWidth?: number;
+  /**
+   * Zengin metin. true iken metindeki işaretler okunur, false/yoksa metin
+   * olduğu gibi basılır (eski projeler değişmez):
+   *   *vurgu*   accentColor ile
+   *   _yazı_    el yazısı (handFamily, handScale, handColor)
+   *   ~bant~    bandColor dolu bant üstünde bandTextColor ile
+   *   ^büyük^   bigScale kat büyük (vars. 1.9); satır yüksekliği o satırın en büyüğüne göre
+   *   =çizgi=   altı çizili (underlineColor, yoksa accentColor; underlineWidth punto oranı)
+   */
+  rich?: boolean;
+  bigScale?: number;
+  underlineColor?: string;
+  underlineWidth?: number;
+  accentColor?: string;
+  handFamily?: string;
+  handWeight?: number;
+  handScale?: number;
+  handColor?: string;
+  bandColor?: string;
+  bandTextColor?: string;
 };
 
 export type LayoutId =
@@ -506,6 +561,23 @@ export type SlideElement = {
   locked?: boolean;
 };
 
+/**
+ * Bir cihazın elle ayarı. Konum/ölçek BASE px ve çarpan; açılar DERECE.
+ *   yaw   → 3D'de cihazın kendi dikey ekseni etrafında dönüş
+ *   pitch → 3D'de öne/arkaya yatış (v1.0) — yalnız o cihaz döner, kamera değil
+ *   posture → iPhone Duo'da YALNIZ bu cihazın açık/kapalı gövdesi (v1.0).
+ *             Yoksa slaydın `device.duoPosture` değeri geçerli.
+ */
+export type DeviceOffset = {
+  x: number;
+  y: number;
+  scale?: number;
+  rotation?: number;
+  yaw?: number;
+  pitch?: number;
+  posture?: "open" | "closed";
+};
+
 // ---------- Slide / SetPlan / Project ----------
 export type Slide = {
   id: string;
@@ -551,10 +623,12 @@ export type Slide = {
    * düzenin kendi eğimine EKLENİR; 2D cihaz kutusu merkezinden döner.
    * 3D sahnede yok sayılır — orada eğim orbit ile verilir. R7/W3 eki.
    */
-  deviceOffset?: { x: number; y: number; scale?: number; rotation?: number };
+  /** yaw: 3D'de cihazın kendi dikey ekseni etrafında dönüşü (derece). Çoklu
+   *  cihazda her telefon ayrı döner; kamera açısı hepsine ortak kalır. */
+  deviceOffset?: DeviceOffset;
   /** İkinci cihazın elle nudge'ı — deviceOffset ile aynı kurallar (split düzenler). */
-  device2Offset?: { x: number; y: number; scale?: number; rotation?: number };
-  device3Offset?: { x: number; y: number; scale?: number; rotation?: number };
+  device2Offset?: DeviceOffset;
+  device3Offset?: DeviceOffset;
   /**
    * Arka plan efekt katmanı — arka plan TÜRÜNDEN bağımsız (solid/gradient/
    * mesh/shader/image hepsinde çalışır). YALNIZ arka plana uygulanır; cihaz,

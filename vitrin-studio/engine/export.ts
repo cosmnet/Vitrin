@@ -31,7 +31,7 @@ export type ExportSetOpts = {
   indexes?: number[];
   /** Dosya adı üreticisi. Yoksa bugünkü `NN.png` / `<size>/NN.png`. */
   nameFor?: ExportNameFor;
-  /** `~/Desktop/Vitrin/<app>/` altındaki alt yol. Yoksa `<locale>`. */
+  /** `<Vitrin>/Projects/<app>/` altındaki alt yol. Yoksa `<locale>`. */
   subPath?: string;
   /** Her slayttan önce sorulur — true = "bu slayttan sonra dur". */
   shouldCancel?: () => boolean;

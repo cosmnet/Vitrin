@@ -51,7 +51,7 @@ vitrin_render_contact_sheet     → KULLANICIYA GÖSTER
   ↳ tek slayt kontrolü: vitrin_render_preview
 vitrin_translate                → diğer diller
 vitrin_sync_design              → tasarımı dillere yay (metin yerinde kalır)
-vitrin_export                   → ~/Desktop/Vitrin/<app>/<dil>/01.png…
+vitrin_export                   → <Vitrin klasörü>/Projects/<app>/<dil>/01.png…
 vitrin_open_studio              → kullanıcı elle devralmak isterse
 ```
 
@@ -74,7 +74,7 @@ ve içe aktarılmış metinleri EZER.
 
 ## Export
 
-- Varsayılan hedef `~/Desktop/Vitrin/<app>/<dil>/` — fastlane düzeni,
+- Varsayılan hedef `<Vitrin klasörü>/Projects/<app>/<dil>/` — fastlane düzeni,
   `01.png … 10.png`.
 - Varsayılan boyut `iphone-69` = **1320×2868**, App Store'un zorunlu ölçüsü.
   `iphone-65` ve `ipad-13` isteğe bağlı, `sizes` ile eklenir.
@@ -245,7 +245,7 @@ tuval oranıyla birlikte değiştiği için yeniden ayar gerekmez).
 > **Claude** *(`vitrin_edit_slide` ×2 → `vitrin_render_preview slide=3` →
 > `vitrin_translate langs=["en"]` → `vitrin_sync_design from=tr to=all` →
 > `vitrin_export locales=all sizes=["iphone-69"]`)*:
-> Bitti — `~/Desktop/Vitrin/Lumo/tr` ve `/en` altında 10'ar PNG (1320×2868).
+> Bitti — `Projects/Lumo/tr` ve `/en` altında 10'ar PNG (1320×2868).
 > Elden geçirmek istersen `vitrin_open_studio` ile stüdyoyu açayım.
 
 ## Sık karşılaşılanlar

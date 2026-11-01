@@ -687,7 +687,7 @@ export async function saveReel(
     bin: "1",
     app: o.app,
     locale: o.locale,
-    // ~/Desktop/Vitrin/<app>/video/<locale>/<sizeId>.mp4
+    // <Vitrin>/Projects/<app>/video/<locale>/<sizeId>.mp4
     subPath: `video/${o.locale}`,
     file,
   });

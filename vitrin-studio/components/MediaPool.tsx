@@ -53,7 +53,9 @@ import { filesToScreenshots } from "@/lib/client";
 import { SHOT_FIELD, shotSlotCount, useStudio, type ShotSlot } from "@/store/studio";
 import { confirmUi } from "./ConfirmDialog";
 import { ContextMenu } from "./ContextMenu";
-import { Icon, useAssets, useRenderRev, type AssetList } from "./ui";
+import { Icon, refreshAssets, useAssets, useRenderRev, type AssetList } from "./ui";
+import { pushToast } from "./toast";
+import { imageFiles, uploadImage } from "@/lib/uploads";
 import { L } from "@/lib/i18n";
 
 /** Marka arka planının iPhone'da uygulanırken kullanılacak kırpması. */
@@ -112,7 +114,7 @@ export default function MediaPool({
         </button>
       </div>
       <div className="pool-body">
-        {tab === "shots" && <ShotsTab slide={slide} />}
+        {tab === "shots" && <p className="note pool-empty">{L("Ekran görüntüleri v1.0'da sağdaki Ekranlar panelinde.", "Screenshots live in the Screens panel on the right since v1.0.")}</p>}
         {tab === "templates" && <TemplatesTab />}
         {tab === "images" && <ImagesTab slide={slide} />}
       </div>
@@ -121,177 +123,10 @@ export default function MediaPool({
 }
 
 /* ================================================================== *
-   Ekranlar
- * ================================================================== */
-
-function ShotsTab({ slide }: { slide?: Slide }) {
-  const project = useStudio((s) => s.project);
-  const addScreenshots = useStudio((s) => s.addScreenshots);
-  const removeScreenshot = useStudio((s) => s.removeScreenshot);
-  const setSlideShot = useStudio((s) => s.setSlideShot);
-  const [over, setOver] = useState(false);
-  // R10 — tıklamanın gideceği yuva. Düzen küçülürse render'da kelepçelenir.
-  const [targetRaw, setTarget] = useState<ShotSlot>(1);
-  const [menu, setMenu] = useState<{ x: number; y: number; id: string; src: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const onFiles = async (files: FileList | null) => {
-    if (!files || !files.length) return;
-    addScreenshots(await filesToScreenshots(Array.from(files)));
-  };
-
-  // Yuva sayısı düzenin device2/device3 alanlarından gelir — id listesi YOK.
-  const slotCount = slide ? shotSlotCount(slide.layout, formatOf(project)) : 1;
-  const duoSlots = isDuoFormat(formatOf(project)) && !slide?.layout.startsWith("duo-") && slotCount===2;
-  const featurePair = slide?.layout === "split-v" || slide?.layout === "split-h";
-  const target = (targetRaw > slotCount ? slotCount : targetRaw) as ShotSlot;
-  const slotNos = (slotCount === 3 ? [1, 2, 3] : slotCount === 2 ? [1, 2] : [1]) as ShotSlot[];
-  const slotOf = (n: ShotSlot) => (slide ? (slide[SHOT_FIELD[n]] as string | undefined) : undefined);
-  const assign = (n: ShotSlot, src?: string) => slide && setSlideShot(slide.id, n, src);
-  const empty = project.screenshots.length === 0;
-
-  return (
-    <>
-      <div className="pool-head">
-        <span className="pool-count">{L("Dosyalar", "Files")}</span>
-        <button className="btn xs" onClick={() => fileRef.current?.click()}>
-          <Icon name="plus" size={11} />
-          {L("Ekle", "Add")}
-        </button>
-      </div>
-      <div
-        className={`drop ${empty ? "" : "compact"} ${over ? "over" : ""}`}
-        onClick={() => fileRef.current?.click()}
-        onDragOver={(e) => (e.preventDefault(), setOver(true))}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => (e.preventDefault(), setOver(false), onFiles(e.dataTransfer.files))}
-      >
-        {/* boş çekmece: tek seferlik daktilo satırı (rapor §8) */}
-        {empty ? <span className="typer">{L("sürükle & bırak", "drag & drop")}</span> : L("PNG/JPG bırak", "Drop PNG/JPG")}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(e) => onFiles(e.target.files)}
-        />
-      </div>
-      {/* R10 — HEDEF YUVA. Çoklu ekran düzeninde "tıkla → ata" tek bir yuvaya
-          gidemez; hedefi burada seçmek, her karoda üç düğme göstermekten
-          hem daha sessiz hem de klavye/çoklu atamada daha hızlı. Tek cihazlı
-          düzende satır hiç çıkmaz (gereksiz karar yok). */}
-      {!empty && slotCount > 1 && (
-        <div
-          className={`slot-bar ${featurePair ? "feature-slot-bar" : ""}`}
-          role="group"
-          aria-label={featurePair ? L("Hedef özellik", "Target feature") : L("Hedef yuva", "Target slot")}
-        >
-          <span className="pool-count">{featurePair ? L("Hedef özellik", "Target feature") : L("Hedef", "Target")}</span>
-          {slotNos.map((n) => (
-            <button
-              key={n}
-              className={`chip ${target === n ? "on" : ""}`}
-              aria-pressed={target === n}
-              onClick={() => setTarget(n)}
-              title={L(`${slotTitle(slide?.layout, n)} yuvasını seç`, `Select ${slotTitle(slide?.layout, n)} slot`)}
-            >
-              {duoSlots ? n===1 ? L("İç ekran", "Inner screen") : L("Dış ekran", "Outer screen") : featurePair ? slotTitle(slide?.layout, n) : n}
-              {!slotOf(n) && <i className="chip-dot" title={L("boş", "empty")} />}
-            </button>
-          ))}
-        </div>
-      )}
-      {empty ? (
-        <p className="note pool-empty">
-          {L("Uygulamanın ham UI ekranlarını buraya bırak; sonra slaytlara dağıt.", "Drop your app's raw UI screens here, then distribute them across slides.")}
-        </p>
-      ) : (
-        <div className="shot-grid pool-grid">
-          {project.screenshots.map((sh) => {
-            // Bir görsel aynı anda birden çok yuvada olabilir (motorun geri
-            // düşme davranışı taklit edilirken sık olur) — hepsi rozetlenir.
-            const at = slotNos.filter((n) => slotOf(n) === sh.dataUrl);
-            return (
-              <div
-                key={sh.id}
-                className={`shot ${at.length ? `on${at[0] === 1 ? "" : at[0]}` : ""}`}
-                title={L(`${sh.name} — tıkla: ${slotTitle(slide?.layout, target)} yuvasına ata · sağ tık: yuva seç`, `${sh.name} — click: assign to ${slotTitle(slide?.layout, target)} slot · right click: choose slot`)}
-                onClick={() => assign(target, sh.dataUrl)}
-                onContextMenu={(e) => (
-                  e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY, id: sh.id, src: sh.dataUrl })
-                )}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={sh.dataUrl} alt={sh.name} loading="lazy" decoding="async" />
-                {at.length > 0 && (
-                  <span className="shot-tags">
-                    {at.map((n) => (
-                      <i key={n} className={`shot-slot s${n}`}>
-                        {n}
-                      </i>
-                    ))}
-                  </span>
-                )}
-                <span className="shot-ops">
-                  {slotNos
-                    .filter((n) => n > 1)
-                    .map((n) => (
-                      <button
-                        key={n}
-                        title={L(`${slotTitle(slide?.layout, n)} olarak ata`, `Assign as ${slotTitle(slide?.layout, n)}`)}
-                        onClick={(e) => (e.stopPropagation(), assign(n, sh.dataUrl))}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  <button
-                    title={L("Projeden sil", "Remove from project")}
-                    onClick={(e) => (e.stopPropagation(), removeScreenshot(sh.id))}
-                  >
-                    <Icon name="x" size={10} />
-                  </button>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          close={() => setMenu(null)}
-          items={[
-            { kind: "head", label: slotCount > 1 ? L("Yuvaya ata", "Assign to slot") : L("Ata", "Assign") },
-            ...slotNos.map((n) => ({
-              kind: "item" as const,
-              label: L(`${slotTitle(slide?.layout, n)} olarak ata`, `Assign as ${slotTitle(slide?.layout, n)}`),
-              icon: "phone" as const,
-              hint: slotOf(n) === menu.src ? L("atanmış", "assigned") : undefined,
-              disabled: !slide,
-              run: () => assign(n, menu.src),
-            })),
-            { kind: "sep" },
-            {
-              kind: "item",
-              label: L("Projeden sil", "Remove from project"),
-              icon: "trash",
-              danger: true,
-              run: () => removeScreenshot(menu.id),
-            },
-          ]}
-        />
-      )}
-    </>
-  );
-}
-
-/* ================================================================== *
    Şablonlar — eski galeri, davranış birebir
  * ================================================================== */
 
-function TemplatesTab() {
+export function TemplatesTab() {
   const project = useStudio((s) => s.project);
   const mutate = useStudio((s) => s.mutate);
   const [kat, setKat] = useState<TemplateKategori | "all">("all");
@@ -525,10 +360,11 @@ const IMAGE_GROUPS: { key: "bg" | "textures" | "generated"; label: string; alpha
   { key: "generated", label: L("Üretilenler", "Generated"), alpha: 0.25 },
 ];
 
-function ImagesTab({ slide }: { slide?: Slide }) {
+export function ImagesTab({ slide, only }: { slide?: Slide; only?: "bg" | "stickers" }) {
   const assets = useAssets();
   const updateSlide = useStudio((s) => s.updateSlide);
-  const [mode, setMode] = useState<"bg" | "stickers">("bg");
+  const [modeRaw, setMode] = useState<"bg" | "stickers">("bg");
+  const mode = only ?? modeRaw;
   const [query,setQuery] = useState("");
   const bg: Background | null = slide ? slide.background ?? getTheme(slide.themeId).background : null;
   const currentSrc = bg && bg.kind === "image" ? bg.src : null;
@@ -546,7 +382,7 @@ function ImagesTab({ slide }: { slide?: Slide }) {
     <>
       {/* Zemin ↔ Sticker: aynı çekmecenin iki içeriği. Sticker bir ZEMİN
           değil, slaytın üstüne oturan serbest ÖĞEDİR — ayrı bir dil. */}
-      <div className="chips" style={{ marginBottom: 10 }}>
+      {!only && <div className="chips" style={{ marginBottom: 10 }}>
         <button
           type="button"
           className={`chip k ${mode === "bg" ? "on" : ""}`}
@@ -561,7 +397,7 @@ function ImagesTab({ slide }: { slide?: Slide }) {
         >
           {L("Sticker", "Stickers")}
         </button>
-      </div>
+      </div>}
       {mode === "stickers" && <StickersPane slide={slide} />}
       {mode === "bg" && (
       <>
@@ -633,10 +469,25 @@ function ImagesTab({ slide }: { slide?: Slide }) {
    ile sticker yolu taşınır); ızgara kartları `draggable`.
  * ================================================================== */
 
-function StickersPane({ slide }: { slide?: Slide }) {
+export function StickersPane({ slide }: { slide?: Slide }) {
   const assets = useAssets();
   const updateSlide = useStudio((s) => s.updateSlide);
   const setSelected = useStudio((s) => s.setSelectedElement);
+  // Finder'dan bırakılan ya da "Ekle" ile seçilen görseller kütüphaneye
+  // (stickers/yuklenen/) kaydolur ve "Yüklediklerin" bölümünde en üstte çıkar.
+  const [over, setOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const onFiles = async (list: FileList | null) => {
+    const picked = imageFiles(list);
+    if (!picked.length) return;
+    try {
+      await Promise.all(picked.map(uploadImage));
+      await refreshAssets();
+      pushToast({ msg: L(`${picked.length} GÖRSEL KÜTÜPHANEDE · TIKLA YA DA TUVALE SÜRÜKLE`, `${picked.length} IMAGE(S) IN LIBRARY · CLICK OR DRAG TO CANVAS`) });
+    } catch (err) {
+      pushToast({ msg: L(`GÖRSEL EKLENEMEDİ · ${err instanceof Error ? err.message : err}`, `IMAGE NOT ADDED · ${err instanceof Error ? err.message : err}`), kind: "err" });
+    }
+  };
   // `AssetList` kit tipinde `stickers` yok; JSON'da geliyor (ui.tsx spread'i
   // bilinmeyen anahtarları korur). Kit'e dokunmadan okunur.
   // R14: sticker'lar + MARKA varlıkları (public/assets/brand/<uygulama>/) tek
@@ -653,6 +504,7 @@ function StickersPane({ slide }: { slide?: Slide }) {
 
   const srcOf = (file: string) =>
     file.startsWith("brand:") ? `/assets/brand/${file.slice(6)}` : `/assets/stickers/${file}`;
+  const uploads = files.filter((f) => f.startsWith("yuklenen/"));
   const poses = BRAND_ARTWORK.filter(a=>a.alpha);
   const curatedPaths = new Set(poses.map(a=>`brand:${a.theme}/${a.id}.webp`));
 
@@ -674,16 +526,36 @@ function StickersPane({ slide }: { slide?: Slide }) {
         <em style={{ color: "var(--ink-4)", fontStyle: "normal", fontSize: 10 }}>
           {String(files.length).padStart(2, "0")}
         </em>
+        <button className="btn xs" onClick={() => fileRef.current?.click()}>
+          <Icon name="plus" size={11} />
+          {L("Ekle", "Add")}
+        </button>
+      </div>
+      <div
+        className={`drop compact ${over ? "over" : ""}`}
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setOver(true); } }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => { e.preventDefault(); setOver(false); void onFiles(e.dataTransfer.files); }}
+      >
+        {L("Görsel bırak: kütüphaneye eklenir", "Drop images: added to the library")}
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" multiple hidden onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
       </div>
       <p className="note pool-note">
-        {L("Tıkla: slaytın ortasına ekler. Öğe seçili gelir; tuvalde seçim aracıyla taşı.", "Click to add to the center of the slide. The element arrives selected; move it on the canvas with the select tool.")}
+        {L("Tıkla: slaytın ortasına ekler. Tuvale sürükle: bıraktığın yere ekler. Finder'dan dosyayı doğrudan tuvale de bırakabilir, ⌘V ile yapıştırabilirsin.", "Click to add to the center of the slide. Drag to the canvas to drop it there. You can also drop files from Finder onto the canvas or paste with ⌘V.")}
       </p>
+      {uploads.length > 0 && <section className="pool-sec"><h4>{L("Yüklediklerin", "Your uploads")} <em>{uploads.length}</em></h4><div className="img-grid">{uploads.map((f) => (
+        <button key={f} className="img-card" style={{ background: "repeating-conic-gradient(#e4e7ee 0 25%, #f5f6f9 0 50%) 0 0 / 14px 14px" }} onClick={() => add(f)} title={f.slice("yuklenen/".length)} draggable onDragStart={(e) => e.dataTransfer.setData("text/vitrin-sticker", f)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={srcOf(f)} alt={f} loading="lazy" decoding="async" />
+        </button>
+      ))}</div></section>}
       {BRAND_COLLECTIONS.filter(c=>poses.some(a=>a.theme===c.id)).map(c=>{const own=poses.filter(a=>a.theme===c.id);return <section key={c.id} className="pool-sec"><h4>{c.app} <em>{L(`${own.length} özgün poz`, `${own.length} original poses`)}</em></h4><div className="img-grid">{own.map(a=>{
         const file=`brand:${a.theme}/${a.id}.webp`;
         return <button key={a.id} className="img-card" onClick={()=>add(file)} title={a.label} aria-label={`${c.app} ${a.label}`} draggable onDragStart={e=>e.dataTransfer.setData("text/vitrin-sticker",file)}><img src={`/assets/brand-previews/${a.id}.webp`} alt={a.label} loading="lazy" decoding="async"/></button>;
       })}</div></section>;})}
       <div className="img-grid">
-        {files.filter(f=>!curatedPaths.has(f)).map((f) => (
+        {files.filter(f=>!curatedPaths.has(f) && !f.startsWith("yuklenen/")).map((f) => (
           <button
             key={f}
             className="img-card"

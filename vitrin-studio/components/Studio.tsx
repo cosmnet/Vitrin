@@ -24,23 +24,31 @@ import { api } from "@/lib/client";
 import { useStudio } from "@/store/studio";
 import CommandPalette from "./CommandPalette";
 import { ConfirmHost } from "./ConfirmDialog";
-import Inspector, { type InspectorTab } from "./Inspector";
+import Inspector from "./Inspector";
 import LocQa from "./LocQa";
 import MatrixExport from "./MatrixExport";
-import MediaPool, { type PoolTab } from "./MediaPool";
-import Rail from "./Rail";
 import LayerPanel from "./LayerPanel";
+import DevicePanel from "./panels/DevicePanel";
+import ScreensPanel from "./panels/ScreensPanel";
+import TextPanel from "./panels/TextPanel";
+import LibraryPanel from "./panels/LibraryPanel";
+import { setLibraryTab } from "./panels/libraryTab";
+import { DockColumn, DockResizer, FloatLayer, PanelRegistry, type PanelDef } from "./workspace/Dock";
+import { focusPanel, useWorkspace, type PanelId } from "@/store/workspace";
+import { PANEL_TITLES } from "./TopBar";
 import Stage, { requestFitZoom } from "./Stage";
 import Timeline from "./Timeline";
 import TopBar from "./TopBar";
 import { Divider, usePanelSizes } from "./panels";
+import { loadFonts } from "@/engine/fonts";
 import { Toasts } from "./toast";
+import ProjectHub from "./ProjectHub";
+import { writeProjectThumb } from "@/lib/projectThumb";
 import {
   ExportDialog,
   GenerateDialog,
   IngestDialog,
   LocalizeDialog,
-  ProjectsDialog,
   SettingsDialog,
 } from "./dialogs";
 import { L } from "@/lib/i18n";
@@ -54,11 +62,35 @@ export type DialogName =
   | "matrix"
   | "locqa"
   | "projects"
+  | "newproject"
   | "settings"
   | null;
 
 const LAST_KEY = "vitrin:lastProjectId";
-const DRAWER_KEY = "vitrin:ui:drawer";
+
+/** v1.0 panel kaydı — başlık, ikon ve içerik. Düzen store/workspace.ts'te. */
+const PANELS: Record<PanelId, PanelDef> = {
+  layers: { title: PANEL_TITLES.layers, icon: "layers", render: () => <LayerPanel /> },
+  text: { title: PANEL_TITLES.text, icon: "type", render: () => <TextPanel /> },
+  library: { title: PANEL_TITLES.library, icon: "grid", render: () => <LibraryPanel /> },
+  scene: { title: PANEL_TITLES.scene, icon: "sun", render: () => <Inspector /> },
+  device: { title: PANEL_TITLES.device, icon: "phone", render: () => <DevicePanel /> },
+  screens: { title: PANEL_TITLES.screens, icon: "image", render: () => <ScreensPanel /> },
+};
+
+/** Tuval seçimi → ilgili panel öne gelir (metin → Metin, cihaz → Cihaz…). */
+function panelForLayer(id: string | null): PanelId | null {
+  if (!id) return null;
+  if (id === "headline" || id === "sub" || id === "badge") return "text";
+  if (id === "device" || id === "device2" || id === "device3" || id.startsWith("screen:")) return "device";
+  if (id.startsWith("element:") || id.startsWith("theme:")) {
+    const st = useStudio.getState();
+    const sl = st.project.sets[st.project.activeLocale]?.slides.find((x) => x.id === st.activeSlideId);
+    const el = id.startsWith("element:") ? sl?.elements?.find((e) => e.id === id.slice(8)) : null;
+    return el?.kind === "text" ? "text" : "layers";
+  }
+  return "layers";
+}
 
 /** Yazı yazılan bir alanda mıyız? (kısayollar orada susar) */
 function isTyping(el: EventTarget | null): boolean {
@@ -72,55 +104,35 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
   const [dialog, setDialog] = useState<DialogName>(null);
   const [mdOpen, setMdOpen] = useState(false);
   const [palette, setPalette] = useState(false);
-  const [poolTab, setPoolTab] = useState<PoolTab>("templates");
-  const [drawer, setDrawer] = useState(true);
-  const [inspTab, setInspTab] = useState<InspectorTab>("design");
   const [sizes, setSizes] = usePanelSizes();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const layerPanelOpen = useStudio(s => s.layerPanelOpen);
-  const rightVisible = !layerPanelOpen || settingsOpen;
-  const shotCount = useStudio((s) => s.project.screenshots.length);
+  const leftW = useWorkspace((s) => s.layout.leftW);
+  const rightW = useWorkspace((s) => s.layout.rightW);
+  const leftEmpty = useWorkspace((s) => s.layout.left.length === 0);
+  const rightEmpty = useWorkspace((s) => s.layout.right.length === 0);
+  const dragging = useWorkspace((s) => s.dragging);
 
-  // Çekmecenin açık/kapalı hâli oturumlar arası hatırlanır (ray kalıcı).
   useEffect(() => {
-    if (isolated) return;
-    try {
-      const raw = localStorage.getItem(DRAWER_KEY);
-      if (raw) {
-        const v = JSON.parse(raw) as { open?: boolean; tab?: PoolTab };
-        if (v.tab && ["shots","templates","images"].includes(v.tab)) setPoolTab(v.tab);
-        setDrawer(!!v.open);
-      }
-    } catch {
-      /* localStorage kapalı olabilir */
-    }
+    useWorkspace.getState().hydrate();
+    void loadFonts();
   }, []);
-  useEffect(() => {
-    if (isolated) return;
-    try {
-      localStorage.setItem(DRAWER_KEY, JSON.stringify({ open: drawer, tab: poolTab }));
-    } catch {
-      /* yoksay */
-    }
-  }, [drawer, poolTab]);
 
-  /** Ray tıklaması: farklı sekme → aç ve geç · aynı sekme → kapat. */
-  const pickTab = useCallback(
-    (t: PoolTab) => {
-      if (drawer && poolTab === t) {
-        setDrawer(false);
-        return;
-      }
-      useStudio.getState().setLayerPanelOpen(false);
-      setPoolTab(t);
-      setDrawer(true);
-    },
-    [drawer, poolTab]
+  // Tuvalde seçilen katmanın paneli öne gelir.
+  useEffect(
+    () =>
+      useStudio.subscribe((st, prev) => {
+        if (st.selectedLayerId === prev.selectedLayerId || !st.selectedLayerId) return;
+        const p = panelForLayer(st.selectedLayerId);
+        if (p) focusPanel(p);
+      }),
+    []
   );
-  const openDrawer = useCallback((t: PoolTab) => {
-    useStudio.getState().setLayerPanelOpen(false);
-    setPoolTab(t);
-    setDrawer(true);
+
+  const openDrawer = useCallback((t: "shots" | "templates" | "images") => {
+    if (t === "shots") focusPanel("screens");
+    else {
+      setLibraryTab(t === "templates" ? "templates" : "backgrounds");
+      focusPanel("library");
+    }
   }, []);
 
   // -------------------------------------------------------------------------
@@ -139,6 +151,7 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
       if (e.key === "Escape") {
         setDialog(null);
         setPalette(false);
+        if (!isTyping(e.target)) useStudio.getState().setSelectedLayer(null);
         return;
       }
       if (isTyping(e.target)) return;
@@ -168,6 +181,13 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
           e.preventDefault();
           st.setActiveSlide(slides[i].id);
         }
+        return;
+      }
+
+      // T → Metin paneli
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        focusPanel("text");
         return;
       }
 
@@ -282,6 +302,7 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
             localStorage.setItem(LAST_KEY, project.id);
           } catch {}
           useStudio.setState({ savedAt: new Date().toLocaleTimeString("tr") });
+          void writeProjectThumb(project);
         } catch {
           /* sessiz — ⌘S ile zorlanabilir */
         }
@@ -294,84 +315,35 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
   }, []);
 
   return (
-    <div className="studio">
-      <TopBar
-        openDialog={setDialog}
-        openPalette={() => setPalette(true)}
-        openImport={() => setMdOpen(true)}
-      />
-      {/* Film şeridi kısa pencerede tuvali boğmasın: 34vh tavanı. */}
-      <div
-        className="vs-body"
-        style={{ gridTemplateRows: `1fr 6px min(${sizes.bottom}px, 34vh)` }}
-      >
+    <PanelRegistry.Provider value={PANELS}>
+    <div className="studio pro">
+      <TopBar openDialog={setDialog} openPalette={() => setPalette(true)} openImport={() => setMdOpen(true)} />
+      <div className="vs-body" style={{ gridTemplateRows: `1fr 5px min(${sizes.bottom}px, 34vh)` }}>
         <div
-          className="vs-cols"
+          className="vs-cols ws-cols"
           style={{
-            gridTemplateColumns: `var(--rail-w) minmax(320px, 1fr) ${rightVisible ? `6px ${sizes.right}px` : "0px 0px"}`,
+            gridTemplateColumns: `${leftEmpty ? (dragging ? "56px 0px" : "0px 0px") : `${leftW}px 4px`} minmax(320px, 1fr) ${rightEmpty ? (dragging ? "0px 56px" : "0px 0px") : `4px ${rightW}px`}`,
           }}
         >
-          <Rail
-            tab={poolTab}
-            open={drawer && !layerPanelOpen}
-            layersOpen={layerPanelOpen}
-            onLayers={() => { const st = useStudio.getState(); st.setLayerPanelTab("layers"); st.setLayerPanelOpen(!layerPanelOpen); }}
-            onBackground={() => useStudio.getState().setSelectedLayer("background")}
-            onPick={pickTab}
-            onPalette={() => setPalette(true)}
-            onSettings={() => setDialog("settings")}
-            shotCount={shotCount}
-          />
-          <div
-            className="vs-center"
-            // Kuyu künyesi çekmece açıkken onun sağından başlasın diye
-            // genişlik CSS değişkeni olarak aşağı geçirilir.
-            style={{ ["--drawer-w" as string]: (drawer || layerPanelOpen) ? `${Math.max(layerPanelOpen ? 310 : 200, sizes.left)}px` : "0px" }}
-          >
-            {layerPanelOpen && <button className={`canvas-settings-toggle ${settingsOpen ? "on" : ""}`} aria-pressed={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>{L("Genel ayarlar", "General settings")}</button>}
+          <DockColumn side="left" />
+          {!leftEmpty ? <DockResizer side="left" /> : <span />}
+          <div className="vs-center" style={{ ["--drawer-w" as string]: "0px" }}>
             <Stage
               onImport={() => setMdOpen(true)}
               onTemplates={() => openDrawer("templates")}
-              onStickers={() => openDrawer("images")}
+              onStickers={() => {
+                setLibraryTab("stickers");
+                focusPanel("library");
+              }}
             />
-            {layerPanelOpen ? (
-              <>
-                <LayerPanel width={Math.max(310, sizes.left)} onClose={() => useStudio.getState().setLayerPanelOpen(false)} />
-                <Divider axis="x" panel="left" className="drawer-grip" style={{ left: Math.max(310, sizes.left) - 3 }} value={Math.max(310, sizes.left)} onChange={v => setSizes({ left: v })} />
-              </>
-            ) : drawer && (
-              <>
-                <MediaPool tab={poolTab} width={sizes.left} onClose={() => setDrawer(false)} />
-                <Divider
-                  axis="x"
-                  panel="left"
-                  className="drawer-grip"
-                  style={{ left: sizes.left - 3 }}
-                  value={sizes.left}
-                  onChange={(v) => setSizes({ left: v })}
-                />
-              </>
-            )}
           </div>
-          {rightVisible && <Divider
-            axis="x"
-            panel="right"
-            value={sizes.right}
-            invert
-            onChange={(v) => setSizes({ right: v })}
-          />
-          }
-          {rightVisible && <Inspector tab={inspTab} setTab={setInspTab} />}
+          {!rightEmpty ? <DockResizer side="right" /> : <span />}
+          <DockColumn side="right" />
         </div>
-        <Divider
-          axis="y"
-          panel="bottom"
-          value={sizes.bottom}
-          invert
-          onChange={(v) => setSizes({ bottom: v })}
-        />
+        <Divider axis="y" panel="bottom" value={sizes.bottom} invert onChange={(v) => setSizes({ bottom: v })} />
         <Timeline />
       </div>
+      <FloatLayer />
 
       {dialog === "generate" && <GenerateDialog close={() => setDialog(null)} />}
       {dialog === "localize" && <LocalizeDialog close={() => setDialog(null)} />}
@@ -382,7 +354,7 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
         <MatrixExport close={() => setDialog(null)} openQa={() => setDialog("locqa")} />
       )}
       {dialog === "locqa" && <LocQa close={() => setDialog(null)} />}
-      {dialog === "projects" && <ProjectsDialog close={() => setDialog(null)} />}
+      {(dialog === "projects" || dialog === "newproject") && <ProjectHub close={() => setDialog(null)} startNew={dialog === "newproject"} />}
       {dialog === "settings" && <SettingsDialog close={() => setDialog(null)} />}
       {mdOpen && <IngestDialog close={() => setMdOpen(false)} />}
       {palette && (
@@ -396,5 +368,6 @@ export default function Studio({ isolated = false }: { isolated?: boolean } = {}
       <Toasts />
       <ConfirmHost />
     </div>
+    </PanelRegistry.Provider>
   );
 }

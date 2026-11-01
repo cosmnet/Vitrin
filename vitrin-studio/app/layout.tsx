@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "./studio-next.css";
+import "./studio-pro.css";
 
 export const metadata: Metadata = {
   title: "Vitrin Studio",

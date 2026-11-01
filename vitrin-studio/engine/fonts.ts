@@ -107,6 +107,28 @@ export const FONTS: FontDef[] = [
   { family: "Space Grotesk", file: "/assets/fonts/SpaceGrotesk-700-latinext.woff2", weight: 700, label: "Space Grotesk Bold", category: "sans" },
   { family: "Instrument Sans", file: "/assets/fonts/InstrumentSans-500-latinext.woff2", weight: 500, label: "Instrument Sans", category: "sans" },
   { family: "Instrument Sans", file: "/assets/fonts/InstrumentSans-700-latinext.woff2", weight: 700, label: "Instrument Sans Bold", category: "sans" },
+  // v1.0 — Google Fonts'tan niş ekler (OFL 1.1, latin + latin-ext → Türkçe tam).
+  // Host Grotesk aynı zamanda stüdyonun arayüz yüzü.
+  { family: "Host Grotesk", file: "/fonts/HostGrotesk-400-latinext.woff2", weight: 400, label: "Host Grotesk", category: "sans" },
+  { family: "Host Grotesk", file: "/fonts/HostGrotesk-400i-latinext.woff2", weight: 400, style: "italic", label: "Host Grotesk Italic", category: "sans" },
+  { family: "Host Grotesk", file: "/fonts/HostGrotesk-600-latinext.woff2", weight: 600, label: "Host Grotesk SemiBold", category: "sans" },
+  { family: "Host Grotesk", file: "/fonts/HostGrotesk-800-latinext.woff2", weight: 800, label: "Host Grotesk ExtraBold", category: "sans" },
+  { family: "Familjen Grotesk", file: "/fonts/FamiljenGrotesk-400-latinext.woff2", weight: 400, label: "Familjen Grotesk", category: "sans" },
+  { family: "Familjen Grotesk", file: "/fonts/FamiljenGrotesk-600-latinext.woff2", weight: 600, label: "Familjen Grotesk SemiBold", category: "sans" },
+  { family: "Familjen Grotesk", file: "/fonts/FamiljenGrotesk-700-latinext.woff2", weight: 700, label: "Familjen Grotesk Bold", category: "sans" },
+  { family: "Funnel Display", file: "/fonts/FunnelDisplay-500-latinext.woff2", weight: 500, label: "Funnel Display", category: "display" },
+  { family: "Funnel Display", file: "/fonts/FunnelDisplay-700-latinext.woff2", weight: 700, label: "Funnel Display Bold", category: "display" },
+  { family: "Funnel Display", file: "/fonts/FunnelDisplay-800-latinext.woff2", weight: 800, label: "Funnel Display ExtraBold", category: "display" },
+  { family: "Gloock", file: "/fonts/Gloock-400-latinext.woff2", weight: 400, label: "Gloock", category: "serif" },
+  { family: "Young Serif", file: "/fonts/YoungSerif-400-latinext.woff2", weight: 400, label: "Young Serif", category: "serif" },
+  // Alan Sans (SIL OFL 1.1) — f:x'in kendi fontu. Değişken dosya; her ağırlık aynı
+  // dosyayı kendi wght değeriyle kaydeder. Display kesimi büyük başlıklar için.
+  { family: "Alan Sans", file: "/assets/fonts/AlanSans-Variable.ttf", weight: 500, label: "Alan Sans", category: "sans" },
+  { family: "Alan Sans", file: "/assets/fonts/AlanSans-Variable.ttf", weight: 700, label: "Alan Sans Bold", category: "sans" },
+  { family: "Alan Sans", file: "/assets/fonts/AlanSans-Variable.ttf", weight: 800, label: "Alan Sans ExtraBold", category: "sans" },
+  { family: "Alan Sans Display", file: "/assets/fonts/AlanSansDisplay-Variable.ttf", weight: 700, label: "Alan Sans Display", category: "display" },
+  { family: "Alan Sans Display", file: "/assets/fonts/AlanSansDisplay-Variable.ttf", weight: 800, label: "Alan Sans Display ExtraBold", category: "display" },
+  { family: "Alan Sans Display", file: "/assets/fonts/AlanSansDisplay-Variable.ttf", weight: 900, label: "Alan Sans Display Black", category: "display" },
   // Mono — brutalist/teknik temaların yüzü. Kiril'i de var, ru'da yüz değişmez.
   { family: "JetBrains Mono", file: "/assets/fonts/JetBrainsMono-500-latinext-cyr.woff2", weight: 500, label: "JetBrains Mono", category: "sans", scripts: ["latin", "cyrillic"] },
   { family: "JetBrains Mono", file: "/assets/fonts/JetBrainsMono-700-latinext-cyr.woff2", weight: 700, label: "JetBrains Mono Bold", category: "sans", scripts: ["latin", "cyrillic"] },
@@ -342,6 +364,10 @@ export function ensureSlideFonts(slide: import("./types").Slide, theme: import("
     fallbackFamilyForLocale(locale),
     ...(slide.elements || []).filter(e => e.kind === "text").map(e => e.style?.fontFamily || "Inter"),
   ]);
+  // Zengin metnin el yazısı parçaları ayrı bir aile kullanır.
+  for (const st of [slide.headlineStyle, slide.subStyle, theme.headline, theme.sub, ...(slide.elements || []).map(e => e.style)]) {
+    if (st?.rich) families.add(st.handFamily || "Caveat");
+  }
   for (const family of [...families]) families.add(familyForLocale(family, locale));
   return loadMany(FONTS.filter(f => families.has(f.family)));
 }

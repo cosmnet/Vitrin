@@ -87,6 +87,8 @@ import {
   baseOf,
   deviceAspectOf,
   deviceStyleForFormat,
+  deviceStyleForSlot,
+  type DeviceStyle3D,
   formatOf,
   type Format,
   clamp,
@@ -106,11 +108,37 @@ import {
   usePreviewOverride,
 } from "./previewOverride";
 import { copyStyle, styleClip, styleClipLabel } from "./styleClip";
-import { pushUndoToast } from "./toast";
-import { Icon, useRenderRev } from "./ui";
+import { pushToast, pushUndoToast } from "./toast";
+import { Icon, refreshAssets, useRenderRev } from "./ui";
+import { imageFiles, uploadImage } from "@/lib/uploads";
+import ShotPicker from "./ShotPicker";
+import { focusPanel } from "@/store/workspace";
+import { ingestScreenshotFiles } from "./panels/shotActions";
+import { SHOT_DRAG_TYPE } from "./panels/ScreensPanel";
+import { isDuoScreenPair, slotLabel } from "./panels/deviceSlots";
+import { duoPostureOfSlot } from "@/engine/types";
+import type { ShotSlot as Slot } from "@/store/studio";
 import { L } from "@/lib/i18n";
 
 type Tool = "device" | "text" | "orbit" | "select";
+
+/**
+ * v1.0 — katman → ekran yuvası. Duo'nun tek gövdeli iç/dış çiftinde kapalı
+ * gövde DIŞ ekranı (2. yuva) gösterir; bırakma ve çift tık oraya yazar.
+ */
+function slotAtLayer(sl: Slide, id: string | null | undefined, fmt?: Format): Slot | null {
+  if (id === "device2" || id === "screen:1") return 2;
+  if (id === "device3") return 3;
+  if (id === "device" || id === "screen:0") {
+    const f = fmt ?? useStudio.getState().project.format;
+    if (isDuoScreenPair(sl, formatOf({ format: f }))) {
+      const dev = sl.device ?? getTheme(sl.themeId).device;
+      return duoPostureOfSlot(dev, formatOf({ format: f }), sl.deviceOffset) === "closed" ? 2 : 1;
+    }
+    return 1;
+  }
+  return null;
+}
 type Zoom = "fit" | number;
 
 /** 2D önizleme rasterinin en fazla genişliği (kaynak px). */
@@ -299,6 +327,8 @@ export default function Stage({
   const cropEditing = useStudio(s => s.cropEditing);
   const [overlap, setOverlap] = useState<{ x: number; y: number; layers: EditorLayer[] } | null>(null);
   const [inlineText, setInlineText] = useState<{ id: string; value: string } | null>(null);
+  /** v1.0 — tuvalde ekrana çift tık: imlecin yanında ekran seçici. */
+  const [shotPick, setShotPick] = useState<{ x: number; y: number; slot: Slot } | null>(null);
   const cropImage = useRef<HTMLImageElement | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -503,7 +533,7 @@ export default function Stage({
     if (src) void loadImage(src).then(img => { if (alive) cropImage.current = img; });
     return () => { alive = false; };
   }, [selectedLayerId, selected?.src, slide?.background, slide?.screenshot, slide?.screenshot2]);
-  useEffect(() => { setInlineText(null); setOverlap(null); }, [slide?.id, project.activeLocale]);
+  useEffect(() => { setInlineText(null); setOverlap(null); setShotPick(null); }, [slide?.id, project.activeLocale]);
 
   // Bir öğe SEÇİLDİĞİ anda seçim aracına geç: seçim panelden de gelebilir
   // (Inspector listesi, sticker çekmecesi) ve tutamaklar yalnız bu araçta
@@ -634,6 +664,8 @@ export default function Stage({
       cy: layout.device.cy + dOff.y / BASE_H,
       scale: layout.device.scale * (dOff.scale ?? 1),
       rotation: layout.device.rotation,
+      yaw: dOff.yaw ? (dOff.yaw * Math.PI) / 180 : undefined,
+      pitch: dOff.pitch ? (dOff.pitch * Math.PI) / 180 : undefined,
     };
     const boxes = [box1];
     if (layout.device2 && slide.screenshot2 && !slide.layerStates?.device2?.hidden) {
@@ -642,6 +674,8 @@ export default function Stage({
         cy: layout.device2.cy + d2Off.y / BASE_H,
         scale: layout.device2.scale * (d2Off.scale ?? 1),
         rotation: layout.device2.rotation,
+        yaw: d2Off.yaw ? (d2Off.yaw * Math.PI) / 180 : undefined,
+        pitch: d2Off.pitch ? (d2Off.pitch * Math.PI) / 180 : undefined,
       });
     }
       // Üçüncü ekran EKSİKSE motor bir öncekine geri döner.
@@ -651,17 +685,27 @@ export default function Stage({
           cy: layout.device3.cy + d3Off.y / BASE_H,
           scale: layout.device3.scale * (d3Off.scale ?? 1),
           rotation: layout.device3.rotation,
+          yaw: d3Off.yaw ? (d3Off.yaw * Math.PI) / 180 : undefined,
+          pitch: d3Off.pitch ? (d3Off.pitch * Math.PI) / 180 : undefined,
         });
       }
 
     view.setSlide({
-      screenshot: ((dev.duoPosture === "closed" || fmt.includes("duo-cover") && dev.duoPosture !== "open") && !layout.device2 ? slide.screenshot2 || slide.screenshot : slide.screenshot) ?? null,
+      screenshot: (((dOff.posture ?? dev.duoPosture) === "closed" || fmt.includes("duo-cover") && (dOff.posture ?? dev.duoPosture) !== "open") && !layout.device2 ? slide.screenshot2 || slide.screenshot : slide.screenshot) ?? null,
       screenshots: [
-        ((dev.duoPosture === "closed" || fmt.includes("duo-cover") && dev.duoPosture !== "open") && !layout.device2 ? slide.screenshot2 || slide.screenshot : slide.screenshot) ?? null,
+        (((dOff.posture ?? dev.duoPosture) === "closed" || fmt.includes("duo-cover") && (dOff.posture ?? dev.duoPosture) !== "open") && !layout.device2 ? slide.screenshot2 || slide.screenshot : slide.screenshot) ?? null,
         ...(layout.device2 && slide.layerStates?.device2?.hidden ? [] : [slide.screenshot2 ?? null]),
         ...(layout.device3 && slide.layerStates?.device3?.hidden ? [] : [slide.screenshot3 ?? slide.screenshot2 ?? null]),
       ],
-      style: deviceStyleForFormat(dev, fmt),
+      style: deviceStyleForSlot(dev, fmt, boxes.length > 1 ? null : dOff) as DeviceStyle3D,
+      // v1.0 — cihaz başına duruş (Duo). Yalnız ayrışma varsa gönderilir.
+      styles: (() => {
+        if (boxes.length < 2) return undefined;
+        const offs = [dOff, d2Off, d3Off].slice(0, boxes.length);
+        const list = offs.map((o) => deviceStyleForSlot(dev, fmt, o) as DeviceStyle3D);
+        const base = deviceStyleForFormat(dev, fmt);
+        return list.some((st) => st.kind !== base.kind || st.duoPosture !== base.duoPosture) ? list : undefined;
+      })(),
       boxRatio: box1,
       boxes,
     });
@@ -1332,7 +1376,7 @@ export default function Stage({
     const selectedHit = st.cropEditing ? hits.find(l => l.id === st.selectedLayerId) : undefined;
     const hit = selectedHit ?? hits[0]; if (!hit) { st.setSelectedLayer(null); return; }
     if (st.selectedLayerId !== hit.id) st.setSelectedLayer(hit.id);
-    else { st.setLayerPanelOpen(true); st.setLayerPanelTab("edit"); }
+    else focusPanel(hit.type === "text" ? "text" : hit.type === "device" || hit.id.startsWith("screen:") ? "device" : "layers");
     setTool("select");
     if (hit.locked) return;
     if (hit.id === "background") { if (st.cropEditing) beginDrag(e, { kind: "crop", id: hit.id }); return; }
@@ -1345,6 +1389,13 @@ export default function Stage({
     const point = toBaseXY(e.clientX, e.clientY), st = useStudio.getState();
     const hits = hitLayers(sl, point.bx, point.by, fmtRef.current, st.project.activeLocale);
     const hit = hits[0]; if (!hit) return;
+    // Cihaz / bölünmüş ekran → ekran seçici (sağ panele gitmeden değiştir).
+    const slot = slotAtLayer(sl, hit.id);
+    if (slot) {
+      if (!hit.id.startsWith("screen:")) st.setSelectedLayer(hit.id);
+      setShotPick({ x: e.clientX, y: e.clientY, slot });
+      return;
+    }
     st.setSelectedLayer(hit.id);
     const el = layerElement(sl, hit.id);
     if (hit.type === "text") setInlineText({ id: hit.id, value: el?.text ?? (hit.id === "sub" ? sl.sub ?? "" : sl.headline) });
@@ -1458,12 +1509,20 @@ export default function Stage({
    * `overflow:auto` olduğu için tarayıcı kendi kaydırmasını yapar ve macOS'un
    * ATALETİ (C5) bedavaya gelir. Elle `scrollBy` yazsak momentum ölürdü.
    */
+  // Tekerlek efekti yawSelected tanımından ÖNCE kuruluyor; güncel fonksiyon buradan okunur.
+  const yawSelectedRef = useRef<(deltaDeg: number) => boolean>(() => false);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onWheelNative = (e: WheelEvent) => {
       const sl = slideRef.current;
       if (!sl) return;
+      // İki parmakla YATAY kaydırma: seçili 3D cihaz kendi ekseninde döner.
+      if (!e.metaKey && !e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) && yawSelectedRef.current(e.deltaX * 0.25)) {
+        e.preventDefault();
+        e.stopPropagation(); // canlı 3D'nin kendi tekerlek dinleyicisi kamerayı oynatmasın
+        return;
+      }
       // Canlı 3D orbit: tekerlek CameraControls'ün dolly'sidir, karışma.
       const t = e.target as HTMLElement | null;
       if (is3DRef.current && toolRef.current === "orbit" && t?.closest?.(".live-wrap")) return;
@@ -1503,8 +1562,9 @@ export default function Stage({
       // Çıplak tekerlek → tuval kaydırma. preventDefault YOK: native scroll
       // + momentum + kauçuk kenar tarayıcının işi.
     };
-    el.addEventListener("wheel", onWheelNative, { passive: false });
-    return () => el.removeEventListener("wheel", onWheelNative);
+    // capture: canlı 3D katmanının (CameraControls) dinleyicisinden ÖNCE karar ver.
+    el.addEventListener("wheel", onWheelNative, { passive: false, capture: true });
+    return () => el.removeEventListener("wheel", onWheelNative, { capture: true });
   }, [anchorAt]);
 
   /* --------------------------------------------------------------------- *
@@ -1532,6 +1592,38 @@ export default function Stage({
      ORTA TUŞ ORBİT — 3D slaytta fareyi orta tuşla sürüklemek telefonu döndürür
    * --------------------------------------------------------------------- */
   const midOrbit = useRef<{ x: number; y: number } | null>(null);
+
+  // v1.0 — SEÇİLİ cihazı kendi ekseninde döndürür: yatay sürükleme yaw,
+  // dikey sürükleme pitch (derece, offset alanında). Seçili bir cihaz yoksa
+  // false döner ve jest eskisi gibi kameraya gider (tüm cihazlar birlikte).
+  // Eskiden yalnız yaw vardı ve motor onu çoklu cihazda yok sayıyordu.
+  const yawSelected = useCallback((deltaDeg: number, deltaPitch = 0): boolean => {
+    const sl = slideRef.current;
+    const id = useStudio.getState().selectedLayerId;
+    if (!sl || !is3DRef.current || (id !== "device" && id !== "device2" && id !== "device3")) return false;
+    const field = id === "device3" ? "device3Offset" : id === "device2" ? "device2Offset" : "deviceOffset";
+    const off = sl[field] ?? { x: 0, y: 0 };
+    const yaw = Math.max(-180, Math.min(180, (off.yaw ?? 0) + deltaDeg));
+    const pitch = Math.max(-80, Math.min(80, (off.pitch ?? 0) + deltaPitch));
+    useStudio.getState().updateSlide(sl.id, { [field]: { ...off, yaw: Math.round(yaw * 10) / 10 || undefined, pitch: Math.round(pitch * 10) / 10 || undefined } }, { coalesceKey: `rot:${sl.id}:${field}` });
+    return true;
+  }, []);
+  yawSelectedRef.current = yawSelected;
+  const yawDrag = useRef<{ x: number; y: number } | null>(null);
+  const onYawMove = useCallback((e: PointerEvent) => {
+    const o = yawDrag.current;
+    if (!o) return;
+    yawSelected((e.clientX - o.x) * 0.4, (e.clientY - o.y) * 0.3);
+    yawDrag.current = { x: e.clientX, y: e.clientY };
+  }, [yawSelected]);
+  const onYawUp = useCallback(() => {
+    yawDrag.current = null;
+    setPanning(false);
+    endUndoGesture();
+    window.removeEventListener("pointermove", onYawMove);
+    window.removeEventListener("pointerup", onYawUp);
+    window.removeEventListener("pointercancel", onYawUp);
+  }, [onYawMove]);
 
   const onOrbitMove = useCallback((e: PointerEvent) => {
     const o = midOrbit.current;
@@ -1561,6 +1653,20 @@ export default function Stage({
       // 3D slaytta ORTA TUŞ artık pan değil ORBİT. (Pan boşluk+sürükle ile
       // yerinde duruyor.) Canlı katman pointer-events almadığı için jesti
       // burada yakalayıp deltayı doğrudan görünüme veriyoruz.
+      // Orbit aracında seçili cihaz varsa sürüklemek YALNIZ onu döndürür.
+      // v1.0: ORTA TUŞ da seçili cihaz varsa YALNIZ onu döndürür (3 ekranlı
+      // karede tek telefonu ayrı çevirmek için). Seçim yoksa kamera orbit'i.
+      if ((e.button === 1 || (e.button === 0 && toolRef.current === "orbit")) && is3DRef.current && yawSelected(0)) {
+        e.preventDefault();
+        e.stopPropagation();
+        beginUndoGesture();
+        if (e.button === 1) setPanning(true);
+        yawDrag.current = { x: e.clientX, y: e.clientY };
+        window.addEventListener("pointermove", onYawMove);
+        window.addEventListener("pointerup", onYawUp);
+        window.addEventListener("pointercancel", onYawUp);
+        return;
+      }
       if (e.button === 1 && is3DRef.current && liveRef.current) {
         e.preventDefault();
         e.stopPropagation();
@@ -1671,7 +1777,8 @@ export default function Stage({
     async (file: string, bx: number, by: number) => {
       const sl = slideRef.current;
       if (!sl) return;
-      const src = `/assets/stickers/${file}`;
+      // Marka varlıkları çekmeceden "brand:<uygulama>/<dosya>" olarak gelir.
+      const src = file.startsWith("brand:") ? `/assets/brand/${file.slice(6)}` : `/assets/stickers/${file}`;
       const img = await loadImage(src);
       const w = 320;
       const h = img && img.width ? Math.round((w * img.height) / img.width) : w;
@@ -1682,6 +1789,59 @@ export default function Stage({
     },
     [putElements]
   );
+
+  // Finder'dan bırakılan ya da yapıştırılan görseller: önce yüklenir
+  // (public/assets/stickers/yuklenen/, Sticker çekmecesinde de görünür), sonra
+  // bırakılan noktaya gerçek en/boy oranıyla eklenir. Birden çok dosya 40 px
+  // kaydırılarak dizilir. `asBackground` ilk dosyayı slaydın zemini yapar.
+  const [fileOver, setFileOver] = useState<null | string>(null);
+  const dropFiles = useCallback(
+    async (files: File[], bx: number, by: number, asBackground: boolean) => {
+      const sl = slideRef.current;
+      if (!sl || !files.length) return;
+      let srcs: string[];
+      try {
+        srcs = await Promise.all(files.map(uploadImage));
+      } catch (err) {
+        pushToast({ msg: L(`GÖRSEL EKLENEMEDİ · ${err instanceof Error ? err.message : err}`, `IMAGE NOT ADDED · ${err instanceof Error ? err.message : err}`), kind: "err" });
+        return;
+      }
+      void refreshAssets();
+      if (asBackground) {
+        useStudio.getState().updateSlide(sl.id, { background: { kind: "image", src: srcs[0] } });
+        return;
+      }
+      const maxW = Math.round(baseOf(fmtRef.current).w * 0.45);
+      const added: SlideElement[] = [];
+      for (const [i, src] of srcs.entries()) {
+        const img = await loadImage(src);
+        const nw = img?.width || maxW;
+        const nh = img?.height || maxW;
+        const w = Math.min(nw, maxW);
+        const h = Math.round((w * nh) / nw);
+        added.push(makeElement("sticker", uid(), { src, cx: bx + i * 40, cy: by + i * 40, w, h }));
+      }
+      putElements([...(slideRef.current?.elements ?? []), ...added]);
+      useStudio.getState().setSelectedElement(added[added.length - 1].id);
+      setTool("select");
+    },
+    [putElements]
+  );
+
+  // ⌘V: panodaki görsel slaydın ortasına eklenir (metin alanı odaktayken değil).
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("input, textarea, [contenteditable='true']")) return;
+      const files = imageFiles(e.clipboardData?.files);
+      if (!files.length) return;
+      e.preventDefault();
+      const b = baseOf(fmtRef.current);
+      void dropFiles(files, b.w / 2, b.h / 2, false);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [dropFiles]);
 
   const duplicateElement = useCallback(
     (id: string) => {
@@ -1714,6 +1874,11 @@ export default function Stage({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTyping(e.target)) return;
+      // v1.0 araç kısayolları: V seç, O orbit (3D).
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === "v" || e.key === "V") { setTool("select"); return; }
+        if ((e.key === "o" || e.key === "O") && is3DRef.current) { setTool("orbit"); return; }
+      }
       const st = useStudio.getState(), id = st.selectedLayerId, sl = slideRef.current;
       if (!id || !sl) return;
       const el = layerElement(sl, id), layer = editorLayers(sl).find(l => l.id === id);
@@ -1766,7 +1931,15 @@ export default function Stage({
     const at = menu ? { bx: menu.bx, by: menu.by } : undefined;
     if (menu) {
       items.push({ kind: "head", label: L("Buradaki katmanlar", "Layers here") });
-      for (const layer of hitLayers(sl, menu.bx, menu.by, fmt, p.activeLocale)) items.push({ kind: "item", label: layer.label, icon: layer.type === "text" ? "text" : layer.type === "device" ? "phone" : "image", run: () => st.setSelectedLayer(layer.id) });
+      const here = hitLayers(sl, menu.bx, menu.by, fmt, p.activeLocale);
+      for (const layer of here) items.push({ kind: "item", label: layer.label, icon: layer.type === "text" ? "text" : layer.type === "device" ? "phone" : "image", run: () => st.setSelectedLayer(layer.id) });
+      // v1.0: cihazın üstünde sağ tık → ekranı buradan değiştir.
+      const devLayer = here.find((h) => slotAtLayer(sl, h.id, fmt));
+      const devSlot = devLayer ? slotAtLayer(sl, devLayer.id, fmt) : null;
+      if (devSlot) {
+        const mx = menu.x, my = menu.y;
+        items.push({ kind: "item", label: L(`${slotLabel(sl, fmt, devSlot)} ekranını değiştir…`, `Replace ${slotLabel(sl, fmt, devSlot)} screen…`), icon: "image", run: () => setShotPick({ x: mx, y: my, slot: devSlot }) });
+      }
       items.push({ kind: "sep" });
     }
 
@@ -2007,19 +2180,69 @@ export default function Stage({
               className="stage-card"
               ref={cardRef}
               style={{ width: size.w, height: size.h }}
-              // Sticker çekmecesinden sürükle-bırak: bırakılan NOKTA öğenin
-              // merkezi olur (MediaPool `text/vitrin-sticker` taşır).
+              // Sürükle-bırak: Sticker çekmecesinden (`text/vitrin-sticker`) ya da
+              // Finder'dan görsel dosyası. Bırakılan NOKTA öğenin merkezi olur;
+              // ⌥ basılıyken bırakılan dosya slaydın zemini olur.
               onDragOver={(e) => {
-                if (e.dataTransfer.types.includes("text/vitrin-sticker")) e.preventDefault();
+                const types = e.dataTransfer.types;
+                const shotDrag = types.includes(SHOT_DRAG_TYPE);
+                if (types.includes("Files") || shotDrag) {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                  // v1.0: cihazın üstündeyken dosya o cihazın EKRANI olur.
+                  const sl = slideRef.current;
+                  const { bx, by } = toBaseXY(e.clientX, e.clientY);
+                  const devHit = sl && !e.altKey ? hitLayers(sl, bx, by, fmtRef.current, useStudio.getState().project.activeLocale).find((h) => slotAtLayer(sl, h.id, fmtRef.current)) : undefined;
+                  const next = devHit ? `dev:${devHit.id}` : shotDrag ? null : e.altKey ? "bg" : "el";
+                  if (fileOver !== next) setFileOver(next);
+                } else if (types.includes("text/vitrin-sticker")) e.preventDefault();
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileOver(null);
               }}
               onDrop={(e) => {
+                setFileOver(null);
+                const { bx, by } = toBaseXY(e.clientX, e.clientY);
+                const files = imageFiles(e.dataTransfer.files);
+                const sl0 = slideRef.current;
+                const devHit = sl0 && !e.altKey ? hitLayers(sl0, bx, by, fmtRef.current, useStudio.getState().project.activeLocale).find((h) => slotAtLayer(sl0, h.id, fmtRef.current)) : undefined;
+                const devSlot = sl0 && devHit ? slotAtLayer(sl0, devHit.id, fmtRef.current) : null;
+                const poolShot = e.dataTransfer.getData(SHOT_DRAG_TYPE);
+                if (sl0 && devSlot && (files.length || poolShot)) {
+                  e.preventDefault();
+                  if (!devHit!.id.startsWith("screen:")) useStudio.getState().setSelectedLayer(devHit!.id);
+                  if (poolShot) useStudio.getState().setSlideShot(sl0.id, devSlot, poolShot);
+                  else void ingestScreenshotFiles(files, { slideId: sl0.id, slot: devSlot, force: true });
+                  return;
+                }
+                if (poolShot) return;
+                if (files.length) {
+                  e.preventDefault();
+                  void dropFiles(files, bx, by, e.altKey);
+                  return;
+                }
                 const f = e.dataTransfer.getData("text/vitrin-sticker");
                 if (!f) return;
                 e.preventDefault();
-                const { bx, by } = toBaseXY(e.clientX, e.clientY);
                 void dropSticker(f, bx, by);
               }}
             >
+              {fileOver && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute", inset: 0, zIndex: 50, pointerEvents: "none",
+                    border: "3px dashed #0043F0", background: "rgba(0,67,240,.10)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <span style={{ background: "#0043F0", color: "#fff", font: "600 13px/1.3 system-ui, sans-serif", padding: "8px 14px", borderRadius: 999 }}>
+                    {fileOver.startsWith("dev:") && slide
+                      ? L(`Bırak: ${slotLabel(slide, fmt, slotAtLayer(slide, fileOver.slice(4), fmt) ?? 1)} ekranı olur`, `Drop: becomes the ${slotLabel(slide, fmt, slotAtLayer(slide, fileOver.slice(4), fmt) ?? 1)} screen`)
+                      : fileOver === "bg" ? L("Bırak: slaydın zemini olur", "Drop: becomes the slide background") : L("Bırak: görsel eklenir · cihaz üstüne bırak: ekran olur · ⌥ zemin", "Drop: adds the image · onto a device: its screen · ⌥ background")}
+                  </span>
+                </div>
+              )}
               {is3D ? (
                 <>
                   <div
@@ -2139,34 +2362,24 @@ export default function Stage({
       {/* Yüzen alt araç adası — Framer kalıbı, zeminden 16px */}
       {!firstRun && (
         <div className="island">
-          <button
-            className={`tool ic ${tool === "device" ? "on" : ""}`}
-            onClick={() => setTool("device")}
-            title={L("Cihazı taşı / ölçekle", "Move / scale device")}
-          >
-            <Icon name="phone" size={14} />
-          </button>
-          <button
-            className={`tool ic ${tool === "text" ? "on" : ""}`}
-            onClick={() => setTool("text")}
-            title={L("Metin bloğunu taşı", "Move text block")}
-          >
-            <Icon name="text" size={14} />
-          </button>
+          {/* v1.0: "Cihazı taşı" ve "Metin bloğunu taşı" araçları kalktı —
+              Seç aracı her katmanı (cihaz ve metin dahil) taşır/boyutlandırır. */}
           <button
             className={`tool ic ${tool === "select" ? "on" : ""}`}
-            onClick={() => { setTool("select"); const st = useStudio.getState(); st.setLayerPanelTab("layers"); st.setLayerPanelOpen(true); }}
-            title={L("Katman seç / taşı / boyutlandır", "Select / move / resize layer")}
+            onClick={() => setTool("select")}
+            title={L("Seç / taşı / boyutlandır (V)", "Select / move / resize (V)")}
           >
-            <Icon name="layers" size={14} />
+            <Icon name="move" size={14} />
           </button>
-          <button
-            className={`tool ic ${tool === "orbit" ? "on" : ""}`}
-            onClick={() => setTool("orbit")}
-            title={L("Canlı 3D orbit", "Live 3D orbit")}
-          >
-            <Icon name="rotate" size={14} />
-          </button>
+          {is3D && (
+            <button
+              className={`tool ic ${tool === "orbit" ? "on" : ""}`}
+              onClick={() => setTool("orbit")}
+              title={L("Kamera orbit (O) · seçili cihaz varsa yalnız onu döndürür", "Camera orbit (O) · turns only the selected device if any")}
+            >
+              <Icon name="rotate" size={14} />
+            </button>
+          )}
           <span className="sep" />
           <button
             className={`tool ic ${safeArea ? "on" : ""}`}
@@ -2198,6 +2411,9 @@ export default function Stage({
         </div>
       )}
 
+      {shotPick && slide && (
+        <ShotPicker x={shotPick.x} y={shotPick.y} slideId={slide.id} slot={shotPick.slot} label={slotLabel(slide, fmt, shotPick.slot)} onClose={() => setShotPick(null)} />
+      )}
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menuItems()} close={() => setMenu(null)} />
       )}

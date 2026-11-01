@@ -6,7 +6,7 @@ import { deviceBox } from "./snap";
 import { splitFrames, isSplitScreen } from "./splitScreens";
 import { drawTextBlock, resolveText } from "./text";
 import { getTheme } from "./themes";
-import { baseOf, deviceAspectOf, deviceStyleForFormat, type Format, type Slide, type SlideElement, type TextFrame } from "./types";
+import { baseOf, deviceAspectOf, deviceStyleForSlot, type Format, type Slide, type SlideElement, type TextFrame } from "./types";
 
 export type EditorLayer = { id: string; label: string; type: "image" | "text" | "device" | "background" | "shape"; hidden?: boolean; locked?: boolean; src?: string; theme?: boolean };
 export type LayerBox = { x: number; y: number; w: number; h: number; rotation?: number };
@@ -69,7 +69,8 @@ export function layerBox(slide: Slide, id: string | null, format: Format, locale
   if (id === "headline" || id === "sub") return textFrames(slide, format, locale)[id];
   if (id?.startsWith("screen:")) return splitFrames(slide.layout, format)[Number(id.slice(7))] ?? null;
   const layout = editorLayout(slide, format);
-  const dev = deviceStyleForFormat(slide.device ?? getTheme(slide.themeId).device, format);
+  const slotOff = id === "device3" ? slide.device3Offset : id === "device2" ? slide.device2Offset : slide.deviceOffset;
+  const dev = deviceStyleForSlot(slide.device ?? getTheme(slide.themeId).device, format, slotOff);
   const aspect = deviceAspectOf(dev.kind);
   if (id === "device") {
     const box = deviceBox(slide, layout, format);

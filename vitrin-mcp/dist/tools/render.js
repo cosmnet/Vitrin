@@ -19,7 +19,7 @@ function expand(p) {
     return path.resolve(s);
 }
 /**
- * /api/export ÇIKTIYI HEP `~/Desktop/Vitrin/<app>/<locale>` altına yazar (yol
+ * /api/export ÇIKTIYI HEP `<Vitrin>/Projects/<app>/<locale>` altına yazar (yol
  * parametresi almıyor ve o route bu dalganın sahipliğinde değil). Kullanıcı
  * başka bir klasör istediğinde dosyalar yazıldıktan SONRA taşınır — render
  * boru hattı bire bir aynı kalır, yalnız varış yeri değişir.
@@ -114,7 +114,7 @@ export function registerRender(server) {
     });
     tool(server, "vitrin_export", {
         title: "Export al",
-        description: "App Store PNG'lerini basar. Varsayılan hedef ~/Desktop/Vitrin/<app>/<dil>/ " +
+        description: "App Store PNG'lerini basar. Varsayılan hedef <Vitrin>/Projects/<app>/<dil>/ " +
             "(fastlane düzeni: dil başına klasör, 01.png…). Her dil AYRI sayfa yüklemesinde " +
             "koşar — 10 slaytlık bir dil ~70 MB dataURL üretir. Uzun iş: 10 slayt × 1 dil ~1-2 dk.",
         inputSchema: z.object({

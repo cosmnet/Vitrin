@@ -29,8 +29,9 @@ export const VITRIN_DIR = envStr(
 export const VITRIN_PORT = envNum("VITRIN_PORT", 4780);
 export const BASE_URL = `http://127.0.0.1:${VITRIN_PORT}`;
 
-/** Export varsayılan kökü — /api/export'un yazdığı yerle aynı. */
-export const EXPORT_ROOT = path.join(os.homedir(), "Desktop", "Vitrin");
+/** Export varsayılan kökü — /api/export'un yazdığı yerle aynı (v1.0:
+ *  `<Vitrin kökü>/Projects`, eskiden ~/Desktop/Vitrin). */
+export const EXPORT_ROOT = envStr("VITRIN_EXPORT_DIR", path.join(path.dirname(VITRIN_DIR), "Projects"));
 
 /** Sağlık yoklaması (ms) — kısa: sunucu ayaktaysa anında döner. */
 export const HEALTH_TIMEOUT_MS = envNum("VITRIN_HEALTH_TIMEOUT", 800);

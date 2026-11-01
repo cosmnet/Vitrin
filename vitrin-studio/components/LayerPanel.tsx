@@ -10,7 +10,9 @@ import { isSplitScreen, splitCropDefault } from "@/engine/splitScreens";
 import { getTheme } from "@/engine/themes";
 import { baseOf, clamp, deviceStyleForFormat, formatOf, isDuoFormat, isDevice3D, uid, type ImageCrop, type ImageFx, type Slide, type SlideElement, type TextStyle } from "@/engine/types";
 import { beginUndoGesture, endUndoGesture, useStudio } from "@/store/studio";
-import { Icon, PanelTabs, Row, Segmented, SliderRow, Swatches } from "./ui";
+import { Icon, Row, Segmented, SliderRow, Swatches } from "./ui";
+import { focusPanel } from "@/store/workspace";
+import { uploadImage } from "@/lib/uploads";
 import { L } from "@/lib/i18n";
 
 function NumberField({ label, value, change, min = -100000, max = 100000 }: { label: string; value: number; change: (value: number) => void; min?: number; max?: number }) {
@@ -81,32 +83,28 @@ function ImageEffects({ fx, change }: { fx?: ImageFx; change: (fx: ImageFx | und
   </>;
 }
 
-function TextControls({ text, style, changeText, changeStyle, accent }: { text: string; style: TextStyle; changeText: (text: string) => void; changeStyle: (style: Partial<TextStyle>) => void; accent: string }) {
-  return <>
-    <div className="field"><label>{L("Metin", "Text")}</label><textarea aria-label={L("Seçili metin", "Selected text")} rows={3} value={text} onChange={e => changeText(e.target.value)}/></div>
-    <div className="field"><label>{L("Yazı tipi", "Font")}</label><select aria-label={L("Seçili metin fontu", "Selected text font")} value={style.fontFamily} onChange={e => changeStyle({ fontFamily: e.target.value })}>{FONT_FAMILIES.map(f => <option key={f.family} value={f.family}>{f.label}</option>)}</select></div>
-    <div className="lp-geometry"><NumberField label={L("Yazı boyutu", "Font size")} value={style.sizePx} min={8} max={1000} change={sizePx => changeStyle({ sizePx })}/><NumberField label={L("Kalınlık", "Weight")} value={style.weight} min={100} max={900} change={weight => changeStyle({ weight })}/></div>
-    <Row label={L("Hiza", "Align")}><Segmented value={style.align ?? "left"} options={[{ value: "left", label: L("Sol", "Left") }, { value: "center", label: L("Orta", "Center") }, { value: "right", label: L("Sağ", "Right") }]} onChange={align => changeStyle({ align })}/></Row>
-    <SliderRow label={L("Satır aralığı", "Line height")} value={style.lineHeight ?? 1.1} min={.6} max={3} step={.02} onChange={lineHeight => changeStyle({ lineHeight })}/>
-    <SliderRow label={L("Harf aralığı", "Letter spacing")} value={style.letterSpacing ?? 0} min={-10} max={40} step={.5} onChange={letterSpacing => changeStyle({ letterSpacing })}/>
-    <Row label={L("Renk", "Color")}><Swatches value={style.color} colors={[accent, "#ffffff", "#0b0b0d", "#f7efdc"]} onChange={color => changeStyle({ color })}/></Row>
-    <button className={`btn sm wide ${style.style === "italic" ? "on" : ""}`} aria-pressed={style.style === "italic"} onClick={() => changeStyle({ style: style.style === "italic" ? "normal" : "italic" })}><i>{L("İtalik", "Italic")}</i></button>
-  </>;
-}
+const SHAPES: { kind: "rect" | "pill" | "glass" | "line" | "arrow"; label: string }[] = [
+  { kind: "rect", label: L("Kutu", "Box") },
+  { kind: "pill", label: L("Hap", "Pill") },
+  { kind: "glass", label: L("Cam", "Glass") },
+  { kind: "line", label: L("Çizgi", "Line") },
+  { kind: "arrow", label: L("Ok", "Arrow") },
+];
 
-export default function LayerPanel({ width, onClose }: { width: number; onClose: () => void }) {
+// v1.0 — KATMANLAR paneli. Liste HER ZAMAN görünür; altında seçili katmanın
+// özellikleri. Metin ve cihaz katmanları kendi panellerinde düzenlenir
+// (Metin / Cihaz) — burada yalnız yönlendirme düğmesi kalır, aynı ayar iki
+// yerde durmaz.
+export default function LayerPanel(_legacy: { width?: number; onClose?: () => void } = {}) {
   const project = useStudio(s => s.project), activeId = useStudio(s => s.activeSlideId);
   const selectedId = useStudio(s => s.selectedLayerId), cropEditing = useStudio(s => s.cropEditing);
-  const tab = useStudio(s => s.layerPanelTab);
-  const setTab = useStudio(s => s.setLayerPanelTab);
   const [aspectLock, setAspectLock] = useState(true);
   const [dragLayer, setDragLayer] = useState<string | null>(null);
+  const [shapes, setShapes] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const scroll = useRef<HTMLDivElement>(null);
   const replaceImage = useRef(false);
   const scaleBase = useRef<{ id: string | null; w: number; h: number }>({ id: null, w: 1, h: 1 });
   const slide = project.sets[project.activeLocale]?.slides.find(s => s.id === activeId) ?? project.sets[project.activeLocale]?.slides[0];
-  useEffect(() => { if (scroll.current) scroll.current.scrollTop = 0; }, [selectedId, tab]);
   if (!slide) return null;
   const fmt = formatOf(project), B = baseOf(fmt), theme = getTheme(slide.themeId);
   const layers = editorLayers(slide), layer = layers.find(l => l.id === selectedId);
@@ -119,9 +117,13 @@ export default function LayerPanel({ width, onClose }: { width: number; onClose:
     const el = makeElement("text", uid(), { cx: B.w / 2, cy: B.h / 2, w: B.w * .7, text: L("Yeni metin", "New text"), accent: theme.headline.color });
     el.style = { ...theme.sub, sizePx: 64 }; up({ elements: [...(slide.elements ?? []), el] }); select(`element:${el.id}`);
   };
+  const addShape = (kind: (typeof SHAPES)[number]["kind"]) => {
+    const el = makeElement(kind, uid(), { cx: B.w / 2, cy: B.h / 2, accent: theme.accent });
+    up({ elements: [...(slide.elements ?? []), el] }); select(`element:${el.id}`); setShapes(false);
+  };
   const fileChanged = async (file?: File) => {
     if (!file) return;
-    const src = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); });
+    const src = await uploadImage(file).catch(() => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); }));
     if (replaceImage.current && element) patch({ src });
     else if (replaceImage.current && selectedId === "background") up({ background: { kind: "image", src } });
     else {
@@ -154,84 +156,71 @@ export default function LayerPanel({ width, onClose }: { width: number; onClose:
       <NumberField label={L("Genişlik", "Width")} value={element.w} min={24} max={B.w * 12} change={w => patch({ w, ...(aspectLock ? { h: Math.round(element.h * w / element.w) } : {}) })}/>
       <NumberField label={L("Yükseklik", "Height")} value={element.h} min={24} max={B.h * 12} change={h => patch({ h, ...(aspectLock ? { w: Math.round(element.w * h / element.h) } : {}) })}/>
     </div>
-    <SliderRow label={L("Öğe ölçeği", "Element scale")} value={Math.round(element.w / scaleBase.current.w * 100)} min={10} max={800} defaultValue={100} onChange={v => {
+    <SliderRow label={L("Ölçek", "Scale")} value={Math.round(element.w / scaleBase.current.w * 100)} min={10} max={800} defaultValue={100} onChange={v => {
       const scale = v / 100, w = Math.max(24, scaleBase.current.w * scale), h = Math.max(24, scaleBase.current.h * scale);
       patch({ x: element.x + (element.w - w) / 2, y: element.y + (element.h - h) / 2, w, h });
-    }} format={v => L(`%${v}`, `${v}%`)}/>
+    }} format={v => `${v}%`}/>
     <SliderRow label={L("Döndürme", "Rotation")} value={element.rotation ?? 0} min={-180} max={180} defaultValue={0} onChange={rotation => patch({ rotation })} format={v => `${v}°`}/>
-    <SliderRow label={L("Opaklık", "Opacity")} value={Math.round((element.opacity ?? 1) * 100)} min={0} max={100} defaultValue={100} onChange={v => patch({ opacity: v / 100 })} format={v => L(`%${v}`, `${v}%`)}/>
+    <SliderRow label={L("Opaklık", "Opacity")} value={Math.round((element.opacity ?? 1) * 100)} min={0} max={100} defaultValue={100} onChange={v => patch({ opacity: v / 100 })} format={v => `${v}%`}/>
     <Row label={L("Sıra", "Order")}><Segmented value={element.z ?? "over"} options={[{ value: "under", label: L("Cihaz arkası", "Behind device") }, { value: "over", label: L("Önde", "In front") }]} onChange={z => patch({ z })}/></Row>
     {selectedId?.startsWith("element:") && <div className="lp-actions"><button className="btn sm" onClick={() => up({ elements: reorderElement(slide.elements, element.id, "front") })}>{L("En öne", "Bring to front")}</button><button className="btn sm" onClick={() => up({ elements: reorderElement(slide.elements, element.id, "back") })}>{L("En arkaya", "Send to back")}</button></div>}
   </> : null;
   const bg = slide.background ?? theme.background;
-  const isText = selectedId === "headline" || selectedId === "sub";
+  const isText = selectedId === "headline" || selectedId === "sub" || element?.kind === "text";
+  const isDevice = selectedId === "device" || selectedId === "device2" || selectedId === "device3";
   const splitIndex = selectedId?.startsWith("screen:") ? Number(selectedId.slice(7)) : -1;
-  return <aside className="drawer layer-drawer" style={{ width }} aria-label={L("Katman düzenleyici", "Layer editor")}>
-    <div className="drawer-head"><Icon name="layers" size={17}/><h2>{L("Katmanlar", "Layers")}</h2><span className="drawer-cnt">{layers.length}</span><button className="tb-icbtn" title={L("Düzenleyiciyi kapat", "Close editor")} aria-label={L("Düzenleyiciyi kapat", "Close editor")} onClick={onClose}><Icon name="x" size={15}/></button></div>
-    <PanelTabs value={tab} tabs={[{ id: "edit", label: L("Düzenle", "Edit") }, { id: "layers", label: L("Katmanlar", "Layers") }]} onChange={setTab}/>
-    <div className="lp-add"><button className="btn sm" onClick={addText}><Icon name="text" size={13}/>{L("Metin ekle", "Add text")}</button><button className="btn sm" onClick={() => { replaceImage.current = false; fileInput.current?.click(); }}><Icon name="image" size={13}/>{L("Görsel ekle", "Add image")}</button></div>
-    <input type="file" ref={fileInput} accept="image/*" hidden onChange={e => { void fileChanged(e.target.files?.[0]); e.target.value = ""; }}/>
-    <div className="lp-scroll" ref={scroll}>
-      {tab === "layers" || !layer ? <>
-        <p className="lp-help">{L("Katmanı seç, tuvalde taşı ve köşelerinden büyüt. Üstteki satır, en üstteki katmandır.", "Select a layer, move it on the canvas and resize it from its corners. The top row is the topmost layer.")}</p>
-        <div className="lp-layer-list" role="list" aria-label={L("Slayt katmanları", "Slide layers")}>{layers.map(item => <div key={item.id} role="listitem" className={`lp-layer ${selectedId === item.id ? "on" : ""} ${item.hidden ? "muted" : ""}`} draggable={item.id.startsWith("element:")} onDragStart={() => setDragLayer(item.id)} onDragOver={e => { if (dragLayer) e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (dragLayer) moveLayer(dragLayer, item.id); setDragLayer(null); }} onDragEnd={() => setDragLayer(null)}>
-          <button className="lp-layer-pick" aria-label={L(`Katman seç: ${item.label}`, `Select layer: ${item.label}`)} onClick={() => select(item.id)}><span className="lp-layer-thumb">{item.src ? <img src={item.src} alt=""/> : <Icon name={item.type === "text" ? "text" : item.type === "device" ? "phone" : item.type === "background" ? "palette" : "frame"} size={16}/>}</span><span><b>{item.label}</b><small>{item.theme ? L("Tema öğesi", "Theme element") : item.type === "background" ? L("Zemin", "Background") : item.type === "text" ? L("Serbest metin", "Free text") : item.type === "device" ? L("Mockup", "Mockup") : L("Görsel / öğe", "Image / element")}</small></span></button>
-          <button className="tb-icbtn" title={item.hidden ? L("Katmanı göster", "Show layer") : L("Katmanı gizle", "Hide layer")} aria-label={L(`${item.hidden ? "Göster" : "Gizle"}: ${item.label}`, `${item.hidden ? "Show" : "Hide"}: ${item.label}`)} aria-pressed={!!item.hidden} onClick={() => visibility(item.id, "hidden")}><Icon name={item.hidden ? "eyeOff" : "eye"} size={14}/></button>
-          <button className="tb-icbtn" title={item.locked ? L("Kilidi aç", "Unlock") : L("Katmanı kilitle", "Lock layer")} aria-label={L(`${item.locked ? "Kilidi aç" : "Kilitle"}: ${item.label}`, `${item.locked ? "Unlock" : "Lock"}: ${item.label}`)} aria-pressed={!!item.locked} style={{ opacity: item.locked ? 1 : .4 }} onClick={() => visibility(item.id, "locked")}><Icon name="lock" size={13}/></button>
-        </div>)}</div>
-        <button className="btn sm wide lp-bg-button" onClick={() => select("background")}><Icon name="palette" size={13}/>{L("Arka planı düzenle", "Edit background")}</button>
-      </> : <>
-        <div className="lp-selection-head"><span className="lp-eyebrow">{layer.type === "background" ? L("ARKA PLAN", "BACKGROUND") : layer.type === "text" ? L("METİN", "TEXT") : layer.type === "device" ? L("CİHAZ", "DEVICE") : L("GÖRSEL / ÖĞE", "IMAGE / ELEMENT")}</span><input aria-label={L("Katman adı", "Layer name")} value={layer.label} onChange={e => rename(e.target.value)}/><button className="tb-icbtn" title={L("Tüm katmanları göster", "Show all layers")} aria-label={L("Tüm katmanları göster", "Show all layers")} onClick={() => setTab("layers")}><Icon name="list" size={15}/></button></div>
-        {layer.locked && <button className="lp-locked" onClick={() => visibility(layer.id, "locked")}><Icon name="lock" size={13}/>{L("Katman kilitli · düzenlemek için aç", "Layer locked · unlock to edit")}</button>}
-        <fieldset className="lp-fields" disabled={!!layer.locked}>
-          {geometry}
-          {element?.kind === "text" && <><h3 className="lp-section-title">{L("Metin düzenle", "Edit text")}</h3><TextControls text={element.text ?? ""} style={{ ...EL_TEXT_BASE, ...element.style }} changeText={text => patch({ text })} changeStyle={style => patch({ style: { ...element.style, ...style } })} accent={theme.accent}/></>}
-          {element && (element.kind === "image" || element.kind === "sticker") && <>
-            <div className="lp-section-title">{L("Görsel", "Image")}<button className="btn xs" onClick={() => { replaceImage.current = true; fileInput.current?.click(); }}>{L("Değiştir", "Replace")}</button></div>
-            <button className={`btn sm wide ${cropEditing ? "on" : ""}`} aria-pressed={cropEditing} onClick={() => useStudio.getState().setCropEditing(!cropEditing)}><Icon name="crop" size={14}/>{cropEditing ? L("Kırpmayı bitir", "Done cropping") : L("Tuvalde kırp", "Crop on canvas")}</button>
-            <CropControls src={element.src} w={element.w} h={element.h} crop={element.crop} fx={element.imageFx} defaultFit={element.kind === "sticker" ? "stretch" : "cover"} change={crop => patch({ crop })}/>
-            <h3 className="lp-section-title">{L("Görsel efektleri", "Image effects")}</h3><ImageEffects fx={element.imageFx} change={imageFx => patch({ imageFx })}/>
-            <Row label={L("Karışım", "Blend")}><select aria-label={L("Katman karışım modu", "Layer blend mode")} value={element.blend ?? ""} onChange={e => patch({ blend: (e.target.value || undefined) as SlideElement["blend"] })}>{BLEND_LABELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Row>
-          </>}
-          {element && !["image", "sticker", "text"].includes(element.kind) && <><Row label={L("Dolgu", "Fill")}><Swatches value={element.style?.fill ?? theme.accent} colors={[theme.accent, "#ffffff", "#0b0b0d"]} onChange={fill => patch({ style: { ...element.style, fill } })}/></Row><SliderRow label={L("Köşe", "Corner")} value={element.style?.radius ?? 0} min={0} max={500} onChange={radius => patch({ style: { ...element.style, radius } })}/>{element.kind === "glass" && <SliderRow label={L("Cam blur", "Glass blur")} value={element.style?.blur ?? 28} min={0} max={160} onChange={blur => patch({ style: { ...element.style, blur } })}/>}</>}
-          {isText && box && <>
-            <h3 className="lp-section-title">{L("Serbest yerleşim", "Free placement")}</h3>
-            <div className="lp-geometry">{(["x", "y", "w"] as const).map(key => <NumberField key={key} label={key === "w" ? L("Metin genişliği", "Text width") : key.toUpperCase()} value={box[key]} min={key === "w" ? 24 : -100000} change={v => up(textFramePatch(slide, selectedId as "headline" | "sub", { x: box.x, y: box.y, w: box.w, rotation: box.rotation, [key]: v }))}/>)}</div>
-            <SliderRow label={L("Metin dönüşü", "Text rotation")} value={box.rotation ?? 0} min={-180} max={180} onChange={rotation => up(textFramePatch(slide, selectedId as "headline" | "sub", { x: box.x, y: box.y, w: box.w, rotation }))} format={v => `${v}°`}/>
-            <TextControls text={slide[selectedId as "headline" | "sub"] ?? ""} style={{ ...theme[selectedId === "headline" ? "headline" : "sub"], align: editorLayout(slide, fmt).text.align, ...slide[selectedId === "headline" ? "headlineStyle" : "subStyle"] }} changeText={text => up({ [selectedId!]: text })} changeStyle={style => up({ [selectedId === "headline" ? "headlineStyle" : "subStyle"]: { ...slide[selectedId === "headline" ? "headlineStyle" : "subStyle"], ...style } })} accent={theme.accent}/>
-            <button className="btn sm wide" onClick={() => up({ textBoxes: { ...slide.textBoxes, [selectedId!]: undefined } })}>{L("Tema konumuna dön", "Back to theme position")}</button>
-          </>}
-          {selectedId === "background" && <>
-            {bg.kind === "image" ? <><button className="btn sm wide" onClick={() => { replaceImage.current = true; fileInput.current?.click(); }}>{L("Arka plan görselini değiştir", "Replace background image")}</button><button className={`btn sm wide ${cropEditing ? "on" : ""}`} onClick={() => useStudio.getState().setCropEditing(!cropEditing)}>{cropEditing ? L("Kırpmayı bitir", "Done cropping") : L("Arka planı tuvalde kırp", "Crop background on canvas")}</button><CropControls src={bg.src} w={B.w} h={B.h} crop={bg.imageCrop} change={imageCrop => up({ background: { ...bg, imageCrop } })}/><Row label={L("Renk kaplama", "Color overlay")}><Swatches value={bg.overlayColor ?? theme.accent} colors={[theme.accent, "#ffffff", "#0b0b0d"]} onChange={overlayColor => up({ background: { ...bg, overlayColor } })}/></Row><SliderRow label={L("Kaplama oranı", "Overlay amount")} value={Math.round((bg.overlayAlpha ?? 0) * 100)} min={0} max={100} onChange={v => up({ background: { ...bg, overlayAlpha: v / 100 } })}/></> : <><p className="note">{bg.kind === "solid" ? L("Düz renk zemin", "Solid color background") : L("Temanın renk / doku zemini", "Theme color / texture background")}</p>{bg.kind === "solid" && <Row label={L("Zemin rengi", "Background color")}><Swatches value={bg.color} colors={[theme.accent, "#ffffff", "#0b0b0d", "#f7efdc"]} onChange={color => up({ background: { kind: "solid", color } })}/></Row>}<button className="btn sm wide" onClick={() => { replaceImage.current = true; fileInput.current?.click(); }}>{L("Arka plana görsel ekle", "Add image to background")}</button></>}
-            <h3 className="lp-section-title">{L("Arka plan efektleri", "Background effects")}</h3>
-            <SliderRow label={L("Arka plan blur", "Background blur")} value={slide.bgFx?.blur ?? 0} min={0} max={160} defaultValue={0} onChange={blur => up({ bgFx: { ...slide.bgFx, blur } })} format={v => `${v}px`}/>
-            <SliderRow label={L("Karartma", "Dim")} value={Math.round((slide.bgFx?.dim ?? 0) * 100)} min={0} max={80} defaultValue={0} onChange={v => up({ bgFx: { ...slide.bgFx, dim: v / 100 } })} format={v => L(`%${v}`, `${v}%`)}/>
-            <SliderRow label={L("Zemin doygunluğu", "Background saturation")} value={Math.round((slide.bgFx?.sat ?? 1) * 100)} min={0} max={300} defaultValue={100} onChange={v => up({ bgFx: { ...slide.bgFx, sat: v / 100 } })} format={v => L(`%${v}`, `${v}%`)}/>
-            <button className="btn sm wide" onClick={() => up({ bgFx: undefined })}>{L("Arka plan efektlerini sıfırla", "Reset background effects")}</button>
-          </>}
-          {splitIndex >= 0 && box && <>
-            <h3 className="lp-section-title">{L("Ekran kırpması", "Screen crop")}</h3>
-            <CropControls src={splitIndex === 0 ? slide.screenshot : slide.screenshot2} w={box.w} h={box.h} crop={{ ...splitCropDefault(slide.layout), ...slide.splitCrop?.[splitIndex] }} change={crop => { const next = [...(slide.splitCrop ?? [])]; next[splitIndex] = crop ?? {}; up({ splitCrop: next }); }}/>
-          </>}
-          {(selectedId === "device" || selectedId === "device2" || selectedId === "device3") && <>
-            <h3 className="lp-section-title">{L("Cihaz yerleşimi", "Device placement")}</h3>
-            {(() => { const field = selectedId === "device3" ? "device3Offset" : selectedId === "device2" ? "device2Offset" : "deviceOffset", off = slide[field] ?? { x: 0, y: 0 }, dev = slide.device ?? theme.device; return <>
-              <SliderRow label={L("Cihaz ölçeği", "Device scale")} value={Math.round((off.scale ?? 1) * 100)} min={10} max={600} defaultValue={100} onChange={v => up({ [field]: { ...off, scale: v / 100 } })} format={v => L(`%${v}`, `${v}%`)}/>
-              <div className="lp-geometry"><NumberField label={L("Cihaz X", "Device X")} value={off.x} change={x => up({ [field]: { ...off, x } })}/><NumberField label={L("Cihaz Y", "Device Y")} value={off.y} change={y => up({ [field]: { ...off, y } })}/></div>
-              {!isDevice3D(dev) && <SliderRow label={L("Cihaz dönüşü", "Device rotation")} value={off.rotation ?? 0} min={-180} max={180} onChange={rotation => up({ [field]: { ...off, rotation } })} format={v => `${v}°`}/>}
-              {isDuoFormat(fmt) && isDevice3D(dev) && <>
-                <h3 className="lp-section-title">{L("iPhone Duo gövdesi", "iPhone Duo body")}</h3>
-                <Segmented value={dev.duoPosture ?? (fmt.includes("cover") ? "closed" : "open")} options={[{ value: "open", label: L("Açık", "Open") }, { value: "closed", label: L("Kapalı", "Closed") }]} onChange={duoPosture => up({ device: { ...dev, model: "real", duoPosture } })}/>
-                {(() => { const kind = deviceStyleForFormat(dev, fmt).kind, closed = kind.includes("cover"); return <Row label={L("Cihaz yönü", "Device orientation")}><Segmented value={kind === "foldable" || kind === "foldable-cover-landscape" ? "landscape" : "portrait"} options={[{ value: "landscape", label: L("Yatay", "Landscape") }, { value: "portrait", label: L("Dikey", "Portrait") }]} onChange={direction => up({ device: { ...dev, kind: closed ? direction === "landscape" ? "foldable-cover-landscape" : "foldable-cover" : direction === "landscape" ? "foldable" : "foldable-portrait" } })}/></Row>; })()}
-                <p className="note">{L("Ekran görselinin tamamı oranı korunarak sığdırılır.", "The whole screenshot is fitted, keeping its aspect ratio.")}</p>
-                <p className="note">{L("Apple iPhone Duo · zhe_kan · verilen GLB modeli", "Apple iPhone Duo · zhe_kan · supplied GLB model")}</p>
-              </>}
-              <button className="btn sm wide" onClick={() => up({ [field]: undefined })}>{L("Cihaz konumunu sıfırla", "Reset device position")}</button>
-            </>; })()}
-          </>}
-        </fieldset>
-        {element && <div className="lp-footer"><button className="btn sm" onClick={() => { const copy = { ...structuredClone(element), id: uid(), name: L(`${layer.label} kopya`, `${layer.label} copy`), x: element.x + 40, y: element.y + 40 }; up({ elements: [...(slide.elements ?? []), copy] }); select(`element:${copy.id}`); }}><Icon name="copy" size={12}/>{L("Çoğalt", "Duplicate")}</button><button className="btn sm" onClick={() => { if (selectedId?.startsWith("theme:")) patch({ hidden: true }); else up({ elements: slide.elements?.filter(e => e.id !== element.id) }); useStudio.getState().setSelectedLayer(null); setTab("layers"); }}><Icon name="trash" size={12}/>{L("Sil", "Delete")}</button></div>}
-      </>}
+  return <div className="layers-panel" aria-label={L("Katmanlar", "Layers")}>
+    <div className="lp-add">
+      <button className="btn sm" onClick={addText}><Icon name="text" size={13}/>{L("Metin", "Text")}</button>
+      <button className="btn sm" onClick={() => { replaceImage.current = false; fileInput.current?.click(); }}><Icon name="image" size={13}/>{L("Görsel", "Image")}</button>
+      <button className={`btn sm ${shapes ? "on" : ""}`} aria-expanded={shapes} onClick={() => setShapes(v => !v)}><Icon name="frame" size={13}/>{L("Şekil", "Shape")}</button>
     </div>
-  </aside>;
+    {shapes && <div className="lp-shapes">{SHAPES.map(sh => <button key={sh.kind} className="chip" onClick={() => addShape(sh.kind)}>+ {sh.label}</button>)}</div>}
+    <input type="file" ref={fileInput} accept="image/*" hidden onChange={e => { void fileChanged(e.target.files?.[0]); e.target.value = ""; }}/>
+    <div className="lp-layer-list" role="list" aria-label={L("Slayt katmanları", "Slide layers")}>{layers.map(item => <div key={item.id} role="listitem" className={`lp-layer ${selectedId === item.id ? "on" : ""} ${item.hidden ? "muted" : ""}`} draggable={item.id.startsWith("element:")} onDragStart={() => setDragLayer(item.id)} onDragOver={e => { if (dragLayer) e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (dragLayer) moveLayer(dragLayer, item.id); setDragLayer(null); }} onDragEnd={() => setDragLayer(null)}>
+      <button className="lp-layer-pick" aria-label={L(`Katman seç: ${item.label}`, `Select layer: ${item.label}`)} onClick={() => select(item.id)}><span className="lp-layer-thumb">{item.src ? <img src={item.src} alt=""/> : <Icon name={item.type === "text" ? "text" : item.type === "device" ? "phone" : item.type === "background" ? "palette" : "frame"} size={14}/>}</span><span><b>{item.label}</b><small>{item.theme ? L("Tema öğesi", "Theme element") : item.type === "background" ? L("Zemin", "Background") : item.type === "text" ? L("Metin", "Text") : item.type === "device" ? L("Cihaz", "Device") : L("Görsel / öğe", "Image / element")}</small></span></button>
+      <button className="tb-icbtn" title={item.hidden ? L("Katmanı göster", "Show layer") : L("Katmanı gizle", "Hide layer")} aria-label={L(`${item.hidden ? "Göster" : "Gizle"}: ${item.label}`, `${item.hidden ? "Show" : "Hide"}: ${item.label}`)} aria-pressed={!!item.hidden} onClick={() => visibility(item.id, "hidden")}><Icon name={item.hidden ? "eyeOff" : "eye"} size={14}/></button>
+      <button className="tb-icbtn" title={item.locked ? L("Kilidi aç", "Unlock") : L("Katmanı kilitle", "Lock layer")} aria-label={L(`${item.locked ? "Kilidi aç" : "Kilitle"}: ${item.label}`, `${item.locked ? "Unlock" : "Lock"}: ${item.label}`)} aria-pressed={!!item.locked} style={{ opacity: item.locked ? 1 : .35 }} onClick={() => visibility(item.id, "locked")}><Icon name="lock" size={13}/></button>
+    </div>)}</div>
+    {layer && <div className="lp-props">
+      <div className="lp-selection-head"><span className="lp-eyebrow">{layer.type === "background" ? L("ARKA PLAN", "BACKGROUND") : layer.type === "text" ? L("METİN", "TEXT") : layer.type === "device" ? L("CİHAZ", "DEVICE") : L("GÖRSEL / ÖĞE", "IMAGE / ELEMENT")}</span><input aria-label={L("Katman adı", "Layer name")} value={layer.label} onChange={e => rename(e.target.value)}/><button className="tb-icbtn" title={L("Seçimi kaldır", "Deselect")} aria-label={L("Seçimi kaldır", "Deselect")} onClick={() => useStudio.getState().setSelectedLayer(null)}><Icon name="x" size={14}/></button></div>
+      {layer.locked && <button className="lp-locked" onClick={() => visibility(layer.id, "locked")}><Icon name="lock" size={13}/>{L("Katman kilitli · düzenlemek için aç", "Layer locked · unlock to edit")}</button>}
+      {isText && <button className="btn sm wide jump" onClick={() => focusPanel("text")}><Icon name="type" size={13}/>{L("Metin panelinde düzenle", "Edit in Text panel")}</button>}
+      {isDevice && <button className="btn sm wide jump" onClick={() => focusPanel("device")}><Icon name="phone" size={13}/>{L("Cihaz panelinde düzenle", "Edit in Device panel")}</button>}
+      <fieldset className="lp-fields" disabled={!!layer.locked}>
+        {!isText && geometry}
+        {element && (element.kind === "image" || element.kind === "sticker") && <>
+          <div className="lp-section-title">{L("Görsel", "Image")}<button className="btn xs" onClick={() => { replaceImage.current = true; fileInput.current?.click(); }}>{L("Değiştir", "Replace")}</button></div>
+          <button className={`btn sm wide ${cropEditing ? "on" : ""}`} aria-pressed={cropEditing} onClick={() => useStudio.getState().setCropEditing(!cropEditing)}><Icon name="crop" size={14}/>{cropEditing ? L("Kırpmayı bitir", "Done cropping") : L("Tuvalde kırp", "Crop on canvas")}</button>
+          <CropControls src={element.src} w={element.w} h={element.h} crop={element.crop} fx={element.imageFx} defaultFit={element.kind === "sticker" ? "stretch" : "cover"} change={crop => patch({ crop })}/>
+          <h3 className="lp-section-title">{L("Görsel efektleri", "Image effects")}</h3><ImageEffects fx={element.imageFx} change={imageFx => patch({ imageFx })}/>
+          <Row label={L("Karışım", "Blend")}><select aria-label={L("Katman karışım modu", "Layer blend mode")} value={element.blend ?? ""} onChange={e => patch({ blend: (e.target.value || undefined) as SlideElement["blend"] })}>{BLEND_LABELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Row>
+        </>}
+        {element && !["image", "sticker", "text"].includes(element.kind) && <>
+          <h3 className="lp-section-title">{L("Şekil", "Shape")}</h3>
+          {element.kind !== "line" && element.kind !== "arrow" && <Row label={L("Dolgu", "Fill")}><Swatches value={element.style?.fill && element.style.fill !== "none" ? element.style.fill : theme.accent} colors={[theme.accent, "#ffffff", "#0b0b0d", "#ff2d55", "#2f6bff"]} onChange={fill => patch({ style: { ...element.style, fill } })}/></Row>}
+          <Row label={L("Kontur", "Stroke")}><Swatches value={element.style?.stroke ?? theme.accent} colors={[theme.accent, "#ffffff", "#0b0b0d"]} onChange={stroke => patch({ style: { ...element.style, stroke } })}/></Row>
+          <SliderRow label={L("Kontur kalınlığı", "Stroke width")} value={element.style?.strokeW ?? 0} min={0} max={64} defaultValue={0} onChange={strokeW => patch({ style: { ...element.style, strokeW } })} format={v => `${v}px`}/>
+          {(element.kind === "rect" || element.kind === "glass") && <SliderRow label={L("Köşe", "Corner")} value={element.style?.radius ?? 0} min={0} max={500} onChange={radius => patch({ style: { ...element.style, radius } })} format={v => `${v}px`}/>}
+          {element.kind === "glass" && <>
+            <SliderRow label={L("Cam bulanıklığı", "Glass blur")} value={element.style?.blur ?? 28} min={0} max={160} onChange={blur => patch({ style: { ...element.style, blur } })} format={v => `${v}px`}/>
+            <SliderRow label={L("Cam tonu", "Glass tint")} value={Math.round((element.style?.tintAlpha ?? .12) * 100)} min={0} max={80} onChange={v => patch({ style: { ...element.style, tintAlpha: v / 100 } })} format={v => `${v}%`}/>
+            <Row label={L("Ton rengi", "Tint color")}><Swatches value={element.style?.tint || "#ffffff"} colors={["#ffffff", "#0b1026", "#002FA7", "#f4520b"]} onChange={tint => patch({ style: { ...element.style, tint } })}/></Row>
+          </>}
+          {(element.kind === "rect" || element.kind === "pill") && <button className="btn sm wide" onClick={() => patch({ style: { ...element.style, fill: element.style?.fill === "none" ? theme.accent : "none" } })}>{element.style?.fill === "none" ? L("Dolguyu geri getir", "Restore fill") : L("Yalnız kontur", "Stroke only")}</button>}
+          <Row label={L("Karışım", "Blend")}><select aria-label={L("Katman karışım modu", "Layer blend mode")} value={element.blend ?? ""} onChange={e => patch({ blend: (e.target.value || undefined) as SlideElement["blend"] })}>{BLEND_LABELS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Row>
+        </>}
+        {selectedId === "background" && <>
+          {bg.kind === "image" ? <><button className="btn sm wide" onClick={() => { replaceImage.current = true; fileInput.current?.click(); }}>{L("Arka plan görselini değiştir", "Replace background image")}</button><button className={`btn sm wide ${cropEditing ? "on" : ""}`} onClick={() => useStudio.getState().setCropEditing(!cropEditing)}>{cropEditing ? L("Kırpmayı bitir", "Done cropping") : L("Arka planı tuvalde kırp", "Crop background on canvas")}</button><CropControls src={bg.src} w={B.w} h={B.h} crop={bg.imageCrop} change={imageCrop => up({ background: { ...bg, imageCrop } })}/></> : <button className="btn sm wide" onClick={() => { replaceImage.current = true; fileInput.current?.click(); }}>{L("Arka plana görsel koy", "Use an image as background")}</button>}
+          <button className="btn sm wide jump" onClick={() => focusPanel("scene")}><Icon name="palette" size={13}/>{L("Renk, gradyan ve efektler: Sahne", "Colors, gradient and effects: Scene")}</button>
+        </>}
+        {splitIndex >= 0 && box && <>
+          <h3 className="lp-section-title">{L("Ekran kırpması", "Screen crop")}</h3>
+          <CropControls src={splitIndex === 0 ? slide.screenshot : slide.screenshot2} w={box.w} h={box.h} crop={{ ...splitCropDefault(slide.layout), ...slide.splitCrop?.[splitIndex] }} change={crop => { const next = [...(slide.splitCrop ?? [])]; next[splitIndex] = crop ?? {}; up({ splitCrop: next }); }}/>
+        </>}
+      </fieldset>
+      {element && !isText && <div className="lp-footer"><button className="btn sm" onClick={() => { const copy = { ...structuredClone(element), id: uid(), name: L(`${layer.label} kopya`, `${layer.label} copy`), x: element.x + 40, y: element.y + 40 }; up({ elements: [...(slide.elements ?? []), copy] }); select(`element:${copy.id}`); }}><Icon name="copy" size={12}/>{L("Çoğalt", "Duplicate")}</button><button className="btn sm danger" onClick={() => { if (selectedId?.startsWith("theme:")) patch({ hidden: true }); else up({ elements: slide.elements?.filter(e => e.id !== element.id) }); useStudio.getState().setSelectedLayer(null); }}><Icon name="trash" size={12}/>{L("Sil", "Delete")}</button></div>}
+    </div>}
+    {!layer && <p className="lp-help">{L("Tuvalde ya da listede bir katman seç. Metin → Metin paneli, cihaz → Cihaz paneli otomatik açılır.", "Select a layer on the canvas or in the list. Text opens the Text panel, devices open the Device panel.")}</p>}
+  </div>;
 }

@@ -212,7 +212,7 @@ export default function MatrixExport({
       ? makeNameFor(style, layout, sizeId, primary, sizes.length > 1)(0, slide)
       : "01.png";
     const dir = layout === "fastlane" ? `screenshots/${l}` : l;
-    return `~/Desktop/Vitrin/${project.app}/${dir}/${name}`;
+    return `Projects/${project.app}/${dir}/${name}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosen, style, layout, project]);
 

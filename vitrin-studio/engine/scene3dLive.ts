@@ -40,7 +40,7 @@ import {
 import type { CameraPresetId, DeviceStyle3D, Orbit } from "./types";
 
 /** Cihaz kutusu, slayt ORANI cinsinden (0..1). `rotation` radyan. */
-export type BoxRatio = { cx: number; cy: number; scale: number; rotation?: number };
+export type BoxRatio = { cx: number; cy: number; scale: number; rotation?: number; yaw?: number; pitch?: number };
 
 export type LiveView = {
   setSlide(p: {
@@ -51,13 +51,15 @@ export type LiveView = {
      */
     screenshots?: (string | null)[];
     style: DeviceStyle3D;
-    boxRatio: { cx: number; cy: number; scale: number };
+    boxRatio: BoxRatio;
     /**
      * ÇOKLU CİHAZ (R10/E): layout kutuları. İlk eleman `boxRatio` ile aynı
      * olmalı. Verilmezse (ya da tek elemanlıysa) tek cihazlı yol — Stage'in
      * bugünkü çağrısı olduğu gibi çalışmaya devam eder.
      */
     boxes?: BoxRatio[];
+    /** v1.0 — kutu başına stil (Duo'da cihaz başına açık/kapalı gövde). */
+    styles?: DeviceStyle3D[];
   }): void;
   setSize(w: number, h: number): void;
   onOrbitCommit(cb: (orbit: Orbit) => void): void;
@@ -186,7 +188,7 @@ export function createLiveDeviceView(container: HTMLElement): LiveView {
     h: Math.max(1, container.clientHeight || 1),
   };
   let lastDpr = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
-  let boxRatio = { cx: 0.5, cy: 0.5, scale: 0.6 };
+  let boxRatio: BoxRatio = { cx: 0.5, cy: 0.5, scale: 0.6 };
   /** Çoklu cihaz kutuları (oransal). Tek elemanlıysa eski tek-cihaz yolu. */
   let boxesRatio: BoxRatio[] = [];
   let preset: Preset = presetOf("front");
@@ -280,10 +282,12 @@ export function createLiveDeviceView(container: HTMLElement): LiveView {
       cy: b.cy * size.h,
       h: b.scale * size.h * comp * preset.fit,
       rotation: b.rotation,
+      yaw: b.yaw,
+      pitch: b.pitch,
     }));
   }
 
-  async function rebuild(shots: (string | null)[], style: DeviceStyle3D): Promise<void> {
+  async function rebuild(shots: (string | null)[], style: DeviceStyle3D, styles?: DeviceStyle3D[]): Promise<void> {
     if (!renderer) return;
     const myGen = ++gen;
     const nextBin = newBin();
@@ -316,6 +320,18 @@ export function createLiveDeviceView(container: HTMLElement): LiveView {
       // kontur (açık tercih) → null döner, assembleStage prosedürel modeli kurar;
       // "real"/glb → hazırlanmış GLB. styleKey model'i içerir → değişince rebuild.
       const source = await buildDeviceSource(style, tex, nextBin, texes[1]);
+      // v1.0 — ayrışan kutu stilleri kendi gövdesini alır (aynı duruş bir kez).
+      let sources: (THREE.Group | null)[] | undefined;
+      if (styles && boxesRatio.length > 1) {
+        const memo = new Map<string, THREE.Group | null>();
+        sources = [];
+        for (let i = 0; i < boxesRatio.length; i++) {
+          const st = styles[i] ?? style;
+          const key = `${st.kind}|${st.duoPosture ?? ""}|${st.model ?? ""}|${st.glb ?? ""}`;
+          if (!memo.has(key)) memo.set(key, await buildDeviceSource(st, texes[i] ?? tex, nextBin, texes[1]));
+          sources.push(memo.get(key) ?? null);
+        }
+      }
       if (disposed || myGen !== gen) {
         disposeBin(nextBin);
         return;
@@ -340,8 +356,14 @@ export function createLiveDeviceView(container: HTMLElement): LiveView {
         bin,
         // Çoklu kutu: konumlar her karede placeByPixels ile tazelenir; burada
         // yalnız ölçek/roll'ü olan bir iskelet kurulur.
-        instances: multi ? instancesFromBoxes(pixelBoxes()) : undefined,
+        instances: multi
+          ? instancesFromBoxes(pixelBoxes())
+          : boxRatio.yaw || boxRatio.pitch
+            ? preset.instances.map((inst, i) => (i === 0 ? { ...inst, ry: inst.ry + (boxRatio.yaw ?? 0), rx: boxRatio.pitch ?? 0 } : inst))
+            : undefined,
         screenTexes: texes,
+        sources,
+        styles: sources ? styles : undefined,
       });
       scene.add(stage.root);
       scene.updateMatrixWorld(true);
@@ -499,7 +521,9 @@ export function createLiveDeviceView(container: HTMLElement): LiveView {
 
       // Orbit hariç stil parmak izi — sadece orbit değiştiyse sahneyi kurma.
       const { orbit: _omit, ...rest } = style;
-      const nextStyleKey = JSON.stringify(rest);
+      // Tek cihazın kendi yaw/pitch'i instance iskeletine yazılır → anahtarda.
+      const nextStyleKey = JSON.stringify(rest) + (p.styles ? JSON.stringify(p.styles.map((st) => [st.kind, st.duoPosture])) : "") +
+        (boxesRatio.length <= 1 ? `|${p.boxRatio.yaw ?? 0}|${p.boxRatio.pitch ?? 0}` : "");
       // Parmak izi TÜM ekranları kapsar: ikinci ekran değişince de sahne
       // yeniden kurulmalı (dokular kopya başına bağlanıyor). Kutu SAYISI da
       // girer — 1↔N geçişi instance iskeletini değiştirir.
@@ -525,7 +549,7 @@ export function createLiveDeviceView(container: HTMLElement): LiveView {
       if (nextStyleKey !== styleKey || nextShotKey !== shotKey) {
         styleKey = nextStyleKey;
         shotKey = nextShotKey;
-        void rebuild(shots, style);
+        void rebuild(shots, style, p.styles);
       }
       markDirty();
     },

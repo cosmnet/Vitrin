@@ -1,4 +1,6 @@
-// Export — PNG'leri ~/Desktop/Vitrin/<uygulama>/<locale>/ altına yazar.
+// Export — PNG'leri <Vitrin kökü>/Projects/<uygulama>/<locale>/ altına yazar.
+// v1.0: eskiden ~/Desktop/Vitrin idi (masaüstü dağılıyordu). Kök = vitrin-studio'nun
+// bir üstü; VITRIN_EXPORT_DIR ortam değişkeni ile değiştirilebilir.
 //
 // R7 / Wave-5 — TOPLAMSAL EK: gövde opsiyonel `subPath` alabilir. Verilirse
 // `<locale>` yerine o alt yol kullanılır (fastlane: "screenshots/tr"). Her
@@ -18,8 +20,8 @@
 // yardımcılardan gelir (resolveRoot / safeTarget), JSON dalıyla tek kod.
 // bin parametresi YOKSA sözleşme bugünküyle birebir aynıdır.
 
+import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 
 import { NextResponse } from "next/server";
@@ -67,7 +69,10 @@ function decodeDataUrl(dataUrl: string): Buffer | null {
    Ortak yol çözümü — JSON dalı da ikili dal da BURADAN geçer.
  * ------------------------------------------------------------------ */
 
-/** `~/Desktop/Vitrin/<app>/<subPath ya da locale>` — her parça temizlenmiş. */
+/** Tüm çıktıların kökü: `<Vitrin kökü>/Projects`. */
+const EXPORT_BASE = process.env.VITRIN_EXPORT_DIR || path.resolve(process.cwd(), "..", "Projects");
+
+/** `<EXPORT_BASE>/<app>/<subPath ya da locale>` — her parça temizlenmiş. */
 function resolveRoot(rawApp: string, rawLocale: string, rawSub: string): string {
   const app = safeSegment(rawApp, "Vitrin");
   const locale = safeSegment(rawLocale, "tr");
@@ -80,7 +85,7 @@ function resolveRoot(rawApp: string, rawLocale: string, rawSub: string): string 
         .slice(0, 4)
     : [];
   const rel = segments.length ? segments : [locale];
-  return path.join(os.homedir(), "Desktop", "Vitrin", app, ...rel);
+  return path.join(EXPORT_BASE, app, ...rel);
 }
 
 /** Kök İÇİNDE kalan mutlak hedef, yoksa null (path traversal koruması). */
@@ -185,5 +190,23 @@ export async function POST(req: Request): Promise<Response> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/* ------------------------------------------------------------------ *
+   v1.0 — çıktı klasörünü Finder'da aç: GET /api/export?reveal=1&app=..
+   Klasör yoksa oluşturulur (ilk dışa aktarmadan önce de açılabilsin).
+ * ------------------------------------------------------------------ */
+export async function GET(req: Request): Promise<Response> {
+  const q = new URL(req.url).searchParams;
+  if (q.get("reveal") !== "1") return NextResponse.json({ error: "Bilinmeyen istek" }, { status: 400 });
+  const app = String(q.get("app") ?? "").trim();
+  const dir = app ? path.join(EXPORT_BASE, safeSegment(app, "Vitrin")) : EXPORT_BASE;
+  try {
+    await mkdir(dir, { recursive: true });
+    if (process.platform === "darwin") execFile("open", [dir], () => {});
+    return NextResponse.json({ dir });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

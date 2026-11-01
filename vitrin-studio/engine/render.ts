@@ -29,9 +29,11 @@ import {
   baseOf,
   isDevice3D,
   deviceStyleForFormat,
+  deviceStyleForSlot,
   type Background,
   type DeviceStyle,
   type DeviceStyle2D,
+  type DeviceStyle3D,
   type Format,
   type Slide,
 } from "./types";
@@ -342,6 +344,8 @@ export async function composeStatic(
     h: layout.device.scale * H * (dOff.scale ?? 1),
     // Slaytın kendi eğimi (derece) düzenin eğimine (radyan) EKLENİR.
     rotation: (layout.device.rotation || 0) + deg2rad(dOff.rotation),
+    yaw: deg2rad(dOff.yaw),
+    pitch: deg2rad(dOff.pitch),
   };
   // İkinci cihaz kutusu (split düzenler). Kendi nudge'ı var: device2Offset.
   const d2Off = slide.device2Offset || { x: 0, y: 0 };
@@ -351,6 +355,8 @@ export async function composeStatic(
         cy: layout.device2.cy * H + d2Off.y * scale,
         h: layout.device2.scale * H * (d2Off.scale ?? 1),
         rotation: (layout.device2.rotation || 0) + deg2rad(d2Off.rotation),
+        yaw: deg2rad(d2Off.yaw),
+        pitch: deg2rad(d2Off.pitch),
       }
     : null;
   const d3Off = slide.device3Offset || { x: 0, y: 0 };
@@ -360,6 +366,8 @@ export async function composeStatic(
         cy: layout.device3.cy * H + d3Off.y * scale,
         h: layout.device3.scale * H * (d3Off.scale ?? 1),
         rotation: (layout.device3.rotation || 0) + deg2rad(d3Off.rotation),
+        yaw: deg2rad(d3Off.yaw),
+        pitch: deg2rad(d3Off.pitch),
       }
     : null;
   // Defne çelengi metin bloğunu uzatır: cihazı aşağı itip biraz küçült ki
@@ -372,7 +380,9 @@ export async function composeStatic(
   }
   const drawsDevice = wantUnder && !opts.skipDevice && !slide.hideDevice;
   const is3D = isDevice3D(dev);
-  const duoClosed = dev.mode === "3d" && dev.duoPosture === "closed" || fmt.includes("duo-cover") && !(dev.mode === "3d" && dev.duoPosture === "open");
+  // v1.0: tek cihazda duruş cihaz başına ayardan da gelebilir (2D Duo).
+  const slotPosture = dOff.posture ?? (dev.mode === "3d" ? dev.duoPosture : undefined);
+  const duoClosed = slotPosture === "closed" || fmt.includes("duo-cover") && slotPosture !== "open";
   const primarySrc = duoClosed && !layout.device2 ? slide.screenshot2 || slide.screenshot : slide.screenshot;
   const shot = drawsDevice && primarySrc ? await loadImage(primarySrc) : null;
   // 2./3. ekran yalnız split kutusu varken DEĞİL, 3D'de her zaman yüklenir:
@@ -438,6 +448,15 @@ export async function composeStatic(
         }
       : dev;
 
+    // v1.0 — cihaz başına duruş (Duo: biri açık biri kapalı). Yalnız gerçekten
+    // ayrışan kutular kendi stilini alır; yoksa ortak stil (eski yol).
+    const slotStyles = [
+      deviceStyleForSlot(slide.device ?? theme.device, fmt, dOff),
+      ...(box2 ? [deviceStyleForSlot(slide.device ?? theme.device, fmt, d2Off)] : []),
+      ...(box3 ? [deviceStyleForSlot(slide.device ?? theme.device, fmt, d3Off)] : []),
+    ];
+    const slotsDiffer = slotStyles.some((st) => st.kind !== dev.kind || (st.mode === "3d" && dev.mode === "3d" && st.duoPosture !== dev.duoPosture));
+
     if (is3D) {
       const boxes = [box, box2, box3].filter((b): b is NonNullable<typeof b> => !!b);
       const multi = boxes.length > 1;
@@ -450,27 +469,41 @@ export async function composeStatic(
       const req: Device3DRequest & { draft?: boolean } = {
         screenshot: shot,
         screenshots: multi ? [shot, ...(box2 ? [shotB] : []), ...(box3 ? [shotC] : [])] : [shot, shotB, shotC],
-        style: dev,
+        style: slotsDiffer && !multi ? (slotStyles[0] as DeviceStyle3D) : dev,
+        styles: slotsDiffer && multi ? (slotStyles as DeviceStyle3D[]) : undefined,
         width: W,
         height: H,
-        box: { cx: box.cx, cy: box.cy, h: box.h * comp },
+        box: { cx: box.cx, cy: box.cy, h: box.h * comp, yaw: box.yaw, pitch: box.pitch },
         boxes: multi
-          ? boxes.map((b) => ({ cx: b.cx, cy: b.cy, h: b.h, rotation: b.rotation }))
+          ? boxes.map((b) => ({ cx: b.cx, cy: b.cy, h: b.h, rotation: b.rotation, yaw: b.yaw, pitch: b.pitch }))
           : undefined,
         draft,
       };
       const layer = await renderDevice3D(req);
-      ctx.drawImage(layer, 0, 0, W, H);
+      // Tek cihazda slaytın eğimi (deviceOffset.rotation) 3D katmanı kutu
+      // merkezinde döndürür; çoklu cihazda eğim kutularla motora gidiyor.
+      if (!multi && box.rotation) {
+        ctx.save();
+        ctx.translate(box.cx, box.cy);
+        ctx.rotate(box.rotation);
+        ctx.translate(-box.cx, -box.cy);
+        ctx.drawImage(layer, 0, 0, W, H);
+        ctx.restore();
+      } else {
+        ctx.drawImage(layer, 0, 0, W, H);
+      }
       return;
     }
 
-    await renderDevice2D({ ctx, style: flatStyle, screenshot: shot, box, scale });
+    // v1.0: Duo'da cihaz başına duruş 2D silüet türünü de değiştirir.
+    const flatFor = (i: number): DeviceStyle2D => slotsDiffer ? { ...flatStyle, kind: slotStyles[i]?.kind ?? flatStyle.kind } : flatStyle;
+    await renderDevice2D({ ctx, style: flatFor(0), screenshot: shot, box, scale });
     // İkinci/üçüncü cihaz — birinciyle AYNI stil, aynı 2D yol.
     if (box2) {
-      await renderDevice2D({ ctx, style: flatStyle, screenshot: shotB, box: box2, scale });
+      await renderDevice2D({ ctx, style: flatFor(1), screenshot: shotB, box: box2, scale });
     }
     if (box3) {
-      await renderDevice2D({ ctx, style: flatStyle, screenshot: shotC, box: box3, scale });
+      await renderDevice2D({ ctx, style: flatFor(box2 ? 2 : 1), screenshot: shotC, box: box3, scale });
     }
   };
 

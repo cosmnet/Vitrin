@@ -342,7 +342,7 @@ function Usage() {
       <div style={{ color: "#C6FF3A" }}>vitrin · headless-video · KULLANIM</div>
       <div style={{ marginTop: 10, color: "#8a8a92" }}>
         App preview mp4 (H.264 High 4.0 + sessiz AAC-LC) — kare kare, offline.
-        Çıktı: ~/Desktop/Vitrin/&lt;app&gt;/video/&lt;locale&gt;/&lt;size&gt;.mp4
+        Çıktı: Projects/&lt;app&gt;/video/&lt;locale&gt;/&lt;size&gt;.mp4
       </div>
       <div style={{ marginTop: 16 }}>PARAMETRELER</div>
       {ROWS.map(([k, v]) => (
